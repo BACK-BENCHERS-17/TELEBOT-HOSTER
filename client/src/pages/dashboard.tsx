@@ -28,11 +28,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { DeployBotDialog } from "@/components/DeployBotDialog";
 import type { Bot as BotType } from "@shared/schema";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const [, setLocation] = useNavigate();
+  const [, setLocation] = useLocation();
   const [deployDialogOpen, setDeployDialogOpen] = useState(false);
 
   const { data: bots = [], isLoading } = useQuery<BotType[]>({
