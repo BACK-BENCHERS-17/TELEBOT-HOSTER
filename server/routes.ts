@@ -115,15 +115,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .pipe(unzipper.Extract({ path: extractPath }))
         .promise();
       
-      // Analyze bot files
-      const files = await promisify(fs.readdir)(extractPath);
-      let hasRequirementsTxt = false;
-      let hasPackageJson = false;
+      // Find bot directory (handle nested folders)
+      let botDirectory = extractPath;
+      const findBotFiles = async (dir: string): Promise<{ hasRequirementsTxt: boolean; hasPackageJson: boolean; foundDir: string; entryPoint?: string }> => {
+        const files = await promisify(fs.readdir)(dir);
+        let hasRequirementsTxt = false;
+        let hasPackageJson = false;
+        let entryPoint: string | undefined;
+        
+        for (const file of files) {
+          const filePath = path.join(dir, file);
+          const stat = await promisify(fs.stat)(filePath);
+          
+          if (stat.isDirectory()) {
+            // Recursively check subdirectories
+            const subResult = await findBotFiles(filePath);
+            if (subResult.hasRequirementsTxt || subResult.hasPackageJson) {
+              return subResult;
+            }
+          } else {
+            if (file === 'requirements.txt') hasRequirementsTxt = true;
+            if (file === 'package.json') hasPackageJson = true;
+            if (file === 'main.py' || file === 'bot.py') entryPoint = file;
+            if (file === 'index.js' || file === 'bot.js') entryPoint = file;
+          }
+        }
+        
+        return { hasRequirementsTxt, hasPackageJson, foundDir: dir, entryPoint };
+      };
       
-      for (const file of files) {
-        if (file === 'requirements.txt') hasRequirementsTxt = true;
-        if (file === 'package.json') hasPackageJson = true;
-      }
+      const { hasRequirementsTxt, hasPackageJson, foundDir, entryPoint } = await findBotFiles(extractPath);
+      botDirectory = foundDir;
       
       // Validate runtime matches
       if (runtime === 'python' && !hasRequirementsTxt) {
@@ -142,6 +164,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
+      // Install dependencies
+      const { spawn } = require('child_process');
+      
+      if (runtime === 'python' && hasRequirementsTxt) {
+        await new Promise<void>((resolve, reject) => {
+          const pip = spawn('pip3', ['install', '-r', 'requirements.txt'], {
+            cwd: botDirectory,
+            stdio: 'pipe'
+          });
+          
+          pip.on('close', (code: number | null) => {
+            if (code === 0) {
+              console.log(`✓ Installed Python dependencies for ${name}`);
+              resolve();
+            } else {
+              reject(new Error(`Failed to install Python dependencies (exit code: ${code})`));
+            }
+          });
+        });
+      }
+      
+      if (runtime === 'nodejs' && hasPackageJson) {
+        await new Promise<void>((resolve, reject) => {
+          const npm = spawn('npm', ['install'], {
+            cwd: botDirectory,
+            stdio: 'pipe'
+          });
+          
+          npm.on('close', (code: number | null) => {
+            if (code === 0) {
+              console.log(`✓ Installed Node.js dependencies for ${name}`);
+              resolve();
+            } else {
+              reject(new Error(`Failed to install Node.js dependencies (exit code: ${code})`));
+            }
+          });
+        });
+      }
+      
       // Create bot record
       const bot = await storage.createBot({
         userId,
@@ -149,7 +210,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         runtime: validatedBot.data.runtime,
         status: 'stopped',
         zipPath,
-        extractedPath: extractPath,
+        extractedPath: botDirectory, // Use actual bot directory, not extraction root
       });
       
       // Create environment variables with validation
@@ -376,11 +437,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const data = JSON.parse(message.toString());
         
         if (data.type === 'subscribe' && data.botId) {
-          botId = data.botId;
-          if (!wsClients.has(botId)) {
-            wsClients.set(botId, new Set());
+          const subscribeBotId = String(data.botId);
+          botId = subscribeBotId;
+          if (!wsClients.has(subscribeBotId)) {
+            wsClients.set(subscribeBotId, new Set());
           }
-          wsClients.get(botId)!.add(ws);
+          wsClients.get(subscribeBotId)!.add(ws);
         }
       } catch (error) {
         console.error('WebSocket message error:', error);
@@ -414,8 +476,35 @@ async function launchBot(botId: number) {
   
   // Get environment variables
   const envVars = await storage.getEnvVarsByBotId(botId);
-  const env = { ...process.env };
-  envVars.forEach(v => { env[v.key] = v.value; });
+  const botEnv: Record<string, string> = { ...process.env } as Record<string, string>;
+  envVars.forEach(v => { botEnv[v.key] = v.value; });
+  
+  // Find entry point in bot directory
+  const botDir = bot.extractedPath!;
+  const files = await promisify(fs.readdir)(botDir);
+  let entryPoint: string | undefined;
+  
+  if (bot.runtime === 'python') {
+    // Look for common Python entry points
+    if (files.includes('main.py')) entryPoint = 'main.py';
+    else if (files.includes('bot.py')) entryPoint = 'bot.py';
+    else if (files.includes('app.py')) entryPoint = 'app.py';
+    else if (files.includes('__main__.py')) entryPoint = '__main__.py';
+    
+    if (!entryPoint) {
+      throw new Error('No Python entry point found (main.py, bot.py, app.py, or __main__.py)');
+    }
+  } else {
+    // Look for common Node.js entry points
+    if (files.includes('index.js')) entryPoint = 'index.js';
+    else if (files.includes('bot.js')) entryPoint = 'bot.js';
+    else if (files.includes('app.js')) entryPoint = 'app.js';
+    else if (files.includes('main.js')) entryPoint = 'main.js';
+    
+    if (!entryPoint) {
+      throw new Error('No Node.js entry point found (index.js, bot.js, app.js, or main.js)');
+    }
+  }
   
   // Start bot process
   const { spawn } = require('child_process');
@@ -424,34 +513,34 @@ async function launchBot(botId: number) {
   
   if (bot.runtime === 'python') {
     command = 'python3';
-    args = ['main.py'];
+    args = [entryPoint];
   } else {
     command = 'node';
-    args = ['index.js'];
+    args = [entryPoint];
   }
   
-  const process = spawn(command, args, {
-    cwd: bot.extractedPath!,
-    env,
+  const botProcess = spawn(command, args, {
+    cwd: botDir,
+    env: botEnv,
   });
   
   // Store process
-  botProcesses.set(botId, process);
+  botProcesses.set(botId, botProcess);
   
   // Handle process output
-  process.stdout.on('data', (data: Buffer) => {
+  botProcess.stdout.on('data', (data: Buffer) => {
     const log = data.toString();
     broadcastLog(botId.toString(), log);
   });
   
-  process.stderr.on('data', (data: Buffer) => {
+  botProcess.stderr.on('data', (data: Buffer) => {
     const log = `[ERROR] ${data.toString()}`;
     broadcastLog(botId.toString(), log);
   });
   
-  process.on('exit', async (code: number) => {
+  botProcess.on('exit', async (code: number | null) => {
     botProcesses.delete(botId);
-    if (code !== 0) {
+    if (code !== 0 && code !== null) {
       await storage.updateBot(botId, { 
         status: 'error', 
         errorMessage: `Process exited with code ${code}` 
@@ -464,7 +553,7 @@ async function launchBot(botId: number) {
   // Update bot status
   const updatedBot = await storage.updateBot(botId, { 
     status: 'running',
-    processId: process.pid?.toString(),
+    processId: botProcess.pid?.toString(),
     errorMessage: null,
   });
   
