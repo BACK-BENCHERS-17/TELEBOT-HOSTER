@@ -2,6 +2,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
+import { spawn } from "child_process";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -115,37 +116,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .pipe(unzipper.Extract({ path: extractPath }))
         .promise();
       
-      // Find bot directory (handle nested folders)
+      // Find bot directory and entry point (handle nested folders)
       let botDirectory = extractPath;
-      const findBotFiles = async (dir: string): Promise<{ hasRequirementsTxt: boolean; hasPackageJson: boolean; foundDir: string; entryPoint?: string }> => {
+      let entryPointPath: string | undefined;
+      
+      const findBotFiles = async (dir: string, basePath: string): Promise<{ 
+        hasRequirementsTxt: boolean; 
+        hasPackageJson: boolean; 
+        dependencyDir?: string;
+        entryPointPath?: string;
+      }> => {
         const files = await promisify(fs.readdir)(dir);
         let hasRequirementsTxt = false;
         let hasPackageJson = false;
-        let entryPoint: string | undefined;
+        let localEntryPoint: string | undefined;
+        let dependencyDir: string | undefined;
+        let entryPointPath: string | undefined;
         
+        // Check files in current directory
         for (const file of files) {
           const filePath = path.join(dir, file);
           const stat = await promisify(fs.stat)(filePath);
           
-          if (stat.isDirectory()) {
-            // Recursively check subdirectories
-            const subResult = await findBotFiles(filePath);
-            if (subResult.hasRequirementsTxt || subResult.hasPackageJson) {
-              return subResult;
+          if (!stat.isDirectory()) {
+            if (file === 'requirements.txt') {
+              hasRequirementsTxt = true;
+              dependencyDir = dir;
             }
-          } else {
-            if (file === 'requirements.txt') hasRequirementsTxt = true;
-            if (file === 'package.json') hasPackageJson = true;
-            if (file === 'main.py' || file === 'bot.py') entryPoint = file;
-            if (file === 'index.js' || file === 'bot.js') entryPoint = file;
+            if (file === 'package.json') {
+              hasPackageJson = true;
+              dependencyDir = dir;
+            }
+            // Check for entry points
+            if (file === 'main.py' || file === 'bot.py' || file === 'app.py' || file === '__main__.py') {
+              localEntryPoint = file;
+            }
+            if (file === 'index.js' || file === 'bot.js' || file === 'app.js' || file === 'main.js') {
+              localEntryPoint = file;
+            }
           }
         }
         
-        return { hasRequirementsTxt, hasPackageJson, foundDir: dir, entryPoint };
+        // If we found both dependency manifest and entry point here, use this directory
+        if ((hasRequirementsTxt || hasPackageJson) && localEntryPoint) {
+          entryPointPath = path.relative(basePath, path.join(dir, localEntryPoint));
+          return { hasRequirementsTxt, hasPackageJson, dependencyDir, entryPointPath };
+        }
+        
+        // If we found dependency manifest but no entry point, search subdirectories for entry point
+        if (hasRequirementsTxt || hasPackageJson) {
+          if (!localEntryPoint) {
+            // Search subdirectories for entry point
+            for (const file of files) {
+              const filePath = path.join(dir, file);
+              const stat = await promisify(fs.stat)(filePath);
+              if (stat.isDirectory()) {
+                const subResult = await findBotFiles(filePath, basePath);
+                if (subResult.entryPointPath) {
+                  return {
+                    hasRequirementsTxt,
+                    hasPackageJson,
+                    dependencyDir,
+                    entryPointPath: subResult.entryPointPath
+                  };
+                }
+              }
+            }
+          }
+          // Return with whatever we found (may have localEntryPoint or not)
+          return { hasRequirementsTxt, hasPackageJson, dependencyDir, entryPointPath: localEntryPoint };
+        }
+        
+        // No manifest found, recursively search subdirectories
+        for (const file of files) {
+          const filePath = path.join(dir, file);
+          const stat = await promisify(fs.stat)(filePath);
+          if (stat.isDirectory()) {
+            const subResult = await findBotFiles(filePath, basePath);
+            if (subResult.hasRequirementsTxt || subResult.hasPackageJson) {
+              return subResult;
+            }
+          }
+        }
+        
+        return { hasRequirementsTxt, hasPackageJson };
       };
       
-      const { hasRequirementsTxt, hasPackageJson, foundDir, entryPoint } = await findBotFiles(extractPath);
-      botDirectory = foundDir;
+      const { hasRequirementsTxt, hasPackageJson, dependencyDir, entryPointPath: foundEntryPoint } = await findBotFiles(extractPath, extractPath);
+      botDirectory = dependencyDir || extractPath;
+      // Make entryPoint relative to botDirectory, not extractPath
+      if (foundEntryPoint) {
+        const fullEntryPath = path.join(extractPath, foundEntryPoint);
+        entryPointPath = path.relative(botDirectory, fullEntryPath);
+      }
       
       // Validate runtime matches
       if (runtime === 'python' && !hasRequirementsTxt) {
@@ -164,9 +227,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Install dependencies
-      const { spawn } = require('child_process');
+      // Validate entry point was found
+      if (!entryPointPath) {
+        await unlinkAsync(zipPath);
+        await promisify(fs.rm)(extractPath, { recursive: true, force: true });
+        const expectedFiles = runtime === 'python' 
+          ? 'main.py, bot.py, app.py, or __main__.py'
+          : 'index.js, bot.js, app.js, or main.js';
+        return res.status(400).json({ 
+          message: `Error: No entry point found. ${runtime === 'python' ? 'Python' : 'Node.js'} bots must include ${expectedFiles}` 
+        });
+      }
       
+      // Install dependencies
       if (runtime === 'python' && hasRequirementsTxt) {
         await new Promise<void>((resolve, reject) => {
           const pip = spawn('pip3', ['install', '-r', 'requirements.txt'], {
@@ -210,7 +283,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         runtime: validatedBot.data.runtime,
         status: 'stopped',
         zipPath,
-        extractedPath: botDirectory, // Use actual bot directory, not extraction root
+        extractedPath: botDirectory, // Directory where dependencies are installed
+        entryPoint: entryPointPath, // Relative path to entry file from botDirectory
       });
       
       // Create environment variables with validation
@@ -479,48 +553,52 @@ async function launchBot(botId: number) {
   const botEnv: Record<string, string> = { ...process.env } as Record<string, string>;
   envVars.forEach(v => { botEnv[v.key] = v.value; });
   
-  // Find entry point in bot directory
-  const botDir = bot.extractedPath!;
-  const files = await promisify(fs.readdir)(botDir);
-  let entryPoint: string | undefined;
+  // Get the entry point - use stored path or search for it
+  let entryPointRelativePath: string;
   
-  if (bot.runtime === 'python') {
-    // Look for common Python entry points
-    if (files.includes('main.py')) entryPoint = 'main.py';
-    else if (files.includes('bot.py')) entryPoint = 'bot.py';
-    else if (files.includes('app.py')) entryPoint = 'app.py';
-    else if (files.includes('__main__.py')) entryPoint = '__main__.py';
-    
-    if (!entryPoint) {
-      throw new Error('No Python entry point found (main.py, bot.py, app.py, or __main__.py)');
-    }
+  if (bot.entryPoint) {
+    // Use the stored entry point path (relative to extractedPath)
+    entryPointRelativePath = bot.entryPoint;
   } else {
-    // Look for common Node.js entry points
-    if (files.includes('index.js')) entryPoint = 'index.js';
-    else if (files.includes('bot.js')) entryPoint = 'bot.js';
-    else if (files.includes('app.js')) entryPoint = 'app.js';
-    else if (files.includes('main.js')) entryPoint = 'main.js';
+    // Fallback: search for entry point in extracted directory
+    const extractedDir = bot.extractedPath!;
+    const files = await promisify(fs.readdir)(extractedDir);
     
-    if (!entryPoint) {
-      throw new Error('No Node.js entry point found (index.js, bot.js, app.js, or main.js)');
+    if (bot.runtime === 'python') {
+      if (files.includes('main.py')) entryPointRelativePath = 'main.py';
+      else if (files.includes('bot.py')) entryPointRelativePath = 'bot.py';
+      else if (files.includes('app.py')) entryPointRelativePath = 'app.py';
+      else if (files.includes('__main__.py')) entryPointRelativePath = '__main__.py';
+      else throw new Error('No Python entry point found');
+    } else {
+      if (files.includes('index.js')) entryPointRelativePath = 'index.js';
+      else if (files.includes('bot.js')) entryPointRelativePath = 'bot.js';
+      else if (files.includes('app.js')) entryPointRelativePath = 'app.js';
+      else if (files.includes('main.js')) entryPointRelativePath = 'main.js';
+      else throw new Error('No Node.js entry point found');
     }
   }
   
+  // Build full path to entry point
+  const extractedPath = bot.extractedPath!;
+  const fullEntryPath = path.join(extractedPath, entryPointRelativePath);
+  const workingDir = path.dirname(fullEntryPath);
+  const entryFileName = path.basename(fullEntryPath);
+  
   // Start bot process
-  const { spawn } = require('child_process');
   let command: string;
   let args: string[];
   
   if (bot.runtime === 'python') {
     command = 'python3';
-    args = [entryPoint];
+    args = [entryFileName];
   } else {
     command = 'node';
-    args = [entryPoint];
+    args = [entryFileName];
   }
   
   const botProcess = spawn(command, args, {
-    cwd: botDir,
+    cwd: workingDir,
     env: botEnv,
   });
   

@@ -46,7 +46,8 @@ export const bots = pgTable("bots", {
   runtime: varchar("runtime", { length: 50 }).notNull(), // 'python' or 'nodejs'
   status: varchar("status", { length: 50 }).notNull().default('stopped'), // 'running', 'stopped', 'error', 'deploying'
   zipPath: text("zip_path"), // Path to uploaded ZIP file
-  extractedPath: text("extracted_path"), // Path to extracted bot files
+  extractedPath: text("extracted_path"), // Path to extracted bot files (directory with dependencies)
+  entryPoint: text("entry_point"), // Relative path to entry file (e.g., 'main.py', 'src/bot.py')
   containerId: varchar("container_id"), // Docker container ID (for future use)
   processId: varchar("process_id"), // Process ID for running bot
   errorMessage: text("error_message"), // Last error message if any
