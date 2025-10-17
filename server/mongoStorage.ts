@@ -27,6 +27,11 @@ const BotSchema = new mongoose.Schema({
   runtime: { type: String, required: true },
   status: { type: String, default: 'stopped' },
   zipPath: String,
+  extractedPath: String,
+  entryPoint: String,
+  containerId: String,
+  processId: String,
+  errorMessage: String,
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });
@@ -59,7 +64,7 @@ export class MongoStorage implements IStorage {
   async connect() {
     if (this.connected) return;
     
-    const mongoUrl = process.env.MONGODB_URL || 'mongodb+srv://chandan:chandan@cluster0.7sbzdpb.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+    const mongoUrl = 'mongodb+srv://chandan:chandan@cluster0.cdcw9zq.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 
     try {
       await mongoose.connect(mongoUrl);
@@ -74,20 +79,20 @@ export class MongoStorage implements IStorage {
   // User operations
   async getUser(id: string): Promise<User | undefined> {
     await this.connect();
-    const user = await UserModel.findById(id).lean();
+    const user = await UserModel.findById(id).lean<any>();
     return user ? { ...user, id: user._id.toString() } as User : undefined;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
     await this.connect();
-    const user = await UserModel.findOne({ email }).lean();
+    const user = await UserModel.findOne({ email }).lean<any>();
     return user ? { ...user, id: user._id.toString() } as User : undefined;
   }
 
   async getAllUsers(): Promise<User[]> {
     await this.connect();
-    const users = await UserModel.find().lean();
-    return users.map(u => ({ ...u, id: u._id.toString() } as User));
+    const users = await UserModel.find().lean<any>();
+    return users.map((u: any) => ({ ...u, id: u._id.toString() } as User));
   }
 
   async createUser(userData: Omit<UpsertUser, 'id'>): Promise<User> {
@@ -103,27 +108,27 @@ export class MongoStorage implements IStorage {
       id,
       { ...rest, updatedAt: new Date() },
       { upsert: true, new: true }
-    ).lean();
+    ).lean<any>();
     return { ...user, id: user!._id.toString() } as User;
   }
 
   // Access Token operations
   async getTokenByValue(token: string): Promise<AccessToken | undefined> {
     await this.connect();
-    const accessToken = await AccessTokenModel.findOne({ token }).lean();
+    const accessToken = await AccessTokenModel.findOne({ token }).lean<any>();
     return accessToken ? { ...accessToken, id: Number(accessToken._id.toString().slice(-8), 16) } as AccessToken : undefined;
   }
 
   async getTokensByUserId(userId: string): Promise<AccessToken[]> {
     await this.connect();
-    const tokens = await AccessTokenModel.find({ userId }).lean();
-    return tokens.map(t => ({ ...t, id: Number(t._id.toString().slice(-8), 16) } as AccessToken));
+    const tokens = await AccessTokenModel.find({ userId }).lean<any>();
+    return tokens.map((t: any) => ({ ...t, id: Number(t._id.toString().slice(-8), 16) } as AccessToken));
   }
 
   async getAllTokens(): Promise<AccessToken[]> {
     await this.connect();
-    const tokens = await AccessTokenModel.find().lean();
-    return tokens.map(t => ({ ...t, id: Number(t._id.toString().slice(-8), 16) } as AccessToken));
+    const tokens = await AccessTokenModel.find().lean<any>();
+    return tokens.map((t: any) => ({ ...t, id: Number(t._id.toString().slice(-8), 16) } as AccessToken));
   }
 
   async createToken(tokenData: InsertAccessToken): Promise<AccessToken> {
@@ -134,60 +139,121 @@ export class MongoStorage implements IStorage {
 
   async updateToken(id: number, updates: Partial<AccessToken>): Promise<AccessToken> {
     await this.connect();
-    const token = await AccessTokenModel.findOneAndUpdate(
-      {},
+    const tokens = await AccessTokenModel.find().lean<any>();
+    const tokenDoc = tokens.find((t: any) => Number(t._id.toString().slice(-8), 16) === id);
+    if (!tokenDoc) throw new Error('Token not found');
+    
+    const token = await AccessTokenModel.findByIdAndUpdate(
+      tokenDoc._id,
       updates,
       { new: true }
-    ).lean();
+    ).lean<any>();
     if (!token) throw new Error('Token not found');
     return { ...token, id: Number(token._id.toString().slice(-8), 16) } as AccessToken;
   }
 
   async deleteToken(id: number): Promise<void> {
     await this.connect();
-    await AccessTokenModel.findOneAndDelete({});
+    const tokens = await AccessTokenModel.find().lean<any>();
+    const tokenDoc = tokens.find((t: any) => Number(t._id.toString().slice(-8), 16) === id);
+    if (tokenDoc) {
+      await AccessTokenModel.findByIdAndDelete(tokenDoc._id);
+    }
   }
 
   // Bot operations
   async getBotById(id: number): Promise<Bot | undefined> {
     await this.connect();
-    const bot = await BotModel.findOne({ _id: id }).lean();
-    return bot ? { ...bot, id: Number(bot._id.toString().slice(-8), 16) } as Bot : undefined;
+    const bots = await BotModel.find().lean<any>();
+    const bot = bots.find((b: any) => Number(b._id.toString().slice(-8), 16) === id);
+    return bot ? { 
+      ...bot, 
+      id: Number(bot._id.toString().slice(-8), 16),
+      zipPath: bot.zipPath || null,
+      extractedPath: bot.extractedPath || null,
+      entryPoint: bot.entryPoint || null,
+      containerId: bot.containerId || null,
+      processId: bot.processId || null,
+      errorMessage: bot.errorMessage || null,
+      createdAt: bot.createdAt || null,
+      updatedAt: bot.updatedAt || null,
+    } as Bot : undefined;
   }
 
   async getBotsByUserId(userId: string): Promise<Bot[]> {
     await this.connect();
-    const bots = await BotModel.find({ userId }).lean();
-    return bots.map(b => ({ ...b, id: Number(b._id.toString().slice(-8), 16) } as Bot));
+    const bots = await BotModel.find({ userId }).lean<any>();
+    return bots.map((b: any) => ({ 
+      ...b, 
+      id: Number(b._id.toString().slice(-8), 16),
+      zipPath: b.zipPath || null,
+      extractedPath: b.extractedPath || null,
+      entryPoint: b.entryPoint || null,
+      containerId: b.containerId || null,
+      processId: b.processId || null,
+      errorMessage: b.errorMessage || null,
+      createdAt: b.createdAt || null,
+      updatedAt: b.updatedAt || null,
+    } as Bot));
   }
 
   async createBot(botData: InsertBot): Promise<Bot> {
     await this.connect();
     const bot = await BotModel.create(botData);
-    return { ...bot.toObject(), id: Number(bot._id.toString().slice(-8), 16) } as Bot;
+    return { 
+      ...bot.toObject(), 
+      id: Number(bot._id.toString().slice(-8), 16),
+      zipPath: bot.zipPath || null,
+      extractedPath: bot.extractedPath || null,
+      entryPoint: bot.entryPoint || null,
+      containerId: bot.containerId || null,
+      processId: bot.processId || null,
+      errorMessage: bot.errorMessage || null,
+      createdAt: bot.createdAt || null,
+      updatedAt: bot.updatedAt || null,
+    } as Bot;
   }
 
   async updateBot(id: number, updates: Partial<Bot>): Promise<Bot> {
     await this.connect();
-    const bot = await BotModel.findOneAndUpdate(
-      {},
+    const bots = await BotModel.find().lean<any>();
+    const botDoc = bots.find((b: any) => Number(b._id.toString().slice(-8), 16) === id);
+    if (!botDoc) throw new Error('Bot not found');
+    
+    const bot = await BotModel.findByIdAndUpdate(
+      botDoc._id,
       { ...updates, updatedAt: new Date() },
       { new: true }
-    ).lean();
+    ).lean<any>();
     if (!bot) throw new Error('Bot not found');
-    return { ...bot, id: Number(bot._id.toString().slice(-8), 16) } as Bot;
+    return { 
+      ...bot, 
+      id: Number(bot._id.toString().slice(-8), 16),
+      zipPath: bot.zipPath || null,
+      extractedPath: bot.extractedPath || null,
+      entryPoint: bot.entryPoint || null,
+      containerId: bot.containerId || null,
+      processId: bot.processId || null,
+      errorMessage: bot.errorMessage || null,
+      createdAt: bot.createdAt || null,
+      updatedAt: bot.updatedAt || null,
+    } as Bot;
   }
 
   async deleteBot(id: number): Promise<void> {
     await this.connect();
-    await BotModel.findOneAndDelete({});
+    const bots = await BotModel.find().lean<any>();
+    const botDoc = bots.find((b: any) => Number(b._id.toString().slice(-8), 16) === id);
+    if (botDoc) {
+      await BotModel.findByIdAndDelete(botDoc._id);
+    }
   }
 
   // Environment variable operations
   async getEnvVarsByBotId(botId: number): Promise<EnvironmentVariable[]> {
     await this.connect();
-    const envVars = await EnvironmentVariableModel.find({ botId }).lean();
-    return envVars.map(e => ({ ...e, id: Number(e._id.toString().slice(-8), 16) } as EnvironmentVariable));
+    const envVars = await EnvironmentVariableModel.find({ botId }).lean<any>();
+    return envVars.map((e: any) => ({ ...e, id: Number(e._id.toString().slice(-8), 16) } as EnvironmentVariable));
   }
 
   async createEnvVar(envVarData: InsertEnvironmentVariable): Promise<EnvironmentVariable> {
@@ -198,6 +264,10 @@ export class MongoStorage implements IStorage {
 
   async deleteEnvVar(id: number): Promise<void> {
     await this.connect();
-    await EnvironmentVariableModel.findOneAndDelete({});
+    const envVars = await EnvironmentVariableModel.find().lean<any>();
+    const envVarDoc = envVars.find((e: any) => Number(e._id.toString().slice(-8), 16) === id);
+    if (envVarDoc) {
+      await EnvironmentVariableModel.findByIdAndDelete(envVarDoc._id);
+    }
   }
 }
