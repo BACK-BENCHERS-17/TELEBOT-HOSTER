@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - Bot Management</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #1a1a1a;
+            --bg-card: #1e1e1e;
+            --border: #2a2a2a;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --accent: #8b5cf6;
+            --accent-hover: #7c3aed;
+            --success: #10b981;
+            --error: #ef4444;
+            --error-bg: #7f1d1d;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Login Screen */
+        .login-screen {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .login-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .login-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 30px;
+        }
+
+        .shield-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--accent);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+        }
+
+        .login-header h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .header-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        /* Tabs */
+        .tabs {
+            margin-bottom: 24px;
+        }
+
+        .tabs-list {
+            display: flex;
+            gap: 4px;
+            background: var(--bg-secondary);
+            padding: 4px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .tab-trigger {
+            flex: 1;
+            padding: 12px 24px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.2s;
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .tab-trigger:hover {
+            background: var(--bg-card);
+        }
+
+        .tab-trigger.active {
+            background: var(--accent);
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Card */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .card-header {
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        /* Form */
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .form-input,
+        .form-select {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .form-input:focus,
+        .form-select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-ghost:hover {
+            background: var(--bg-secondary);
+        }
+
+        .btn-danger {
+            background: var(--error);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Badge */
+        .badge {
+            display: inline-flex;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .badge-active {
+            background: #065f46;
+            color: #10b981;
+        }
+
+        .badge-inactive {
+            background: #991b1b;
+            color: #f87171;
+        }
+
+        /* Table */
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            text-align: left;
+            padding: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--border);
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Alert */
+        .alert {
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .alert-error {
+            background: var(--error-bg);
+            color: var(--error);
+            border: 1px solid var(--error);
+        }
+
+        .alert-success {
+            background: #065f46;
+            color: #10b981;
+            border: 1px solid #10b981;
+        }
+
+        /* Utilities */
+        .hidden {
+            display: none !important;
+        }
+
+        .icon {
+            width: 16px;
+            height: 16px;
+        }
+
+        .flex {
+            display: flex;
+        }
+
+        .items-center {
+            align-items: center;
+        }
+
+        .gap-2 {
+            gap: 8px;
+        }
+
+        .text-sm {
+            font-size: 14px;
+        }
+
+        .text-xs {
+            font-size: 12px;
+        }
+
+        @media (max-width: 768px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="shield-icon">🛡️</div>
+                <h1>Admin Login</h1>
+            </div>
+            <div id="loginError" class="alert alert-error hidden">
+                Invalid credentials
+            </div>
+            <form onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label class="form-label">Username</label>
+                    <input type="text" class="form-input" id="loginUsername" placeholder="Enter username" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Password</label>
+                    <input type="password" class="form-input" id="loginPassword" placeholder="Enter password" required>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%;">
+                    Login
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Admin Panel -->
+    <div id="adminPanel" class="hidden">
+        <div class="header">
+            <div class="header-title">
+                <div class="shield-icon">🛡️</div>
+                <div>
+                    <h2 style="font-size: 20px; font-weight: 600;">Admin Panel</h2>
+                    <p class="text-xs" style="color: var(--text-secondary);">Bot Management System</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-ghost" onclick="handleLogout()">
+                    <span>🚪</span>
+                    Logout
+                </button>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="tabs">
+                <div class="tabs-list">
+                    <button class="tab-trigger active" onclick="switchTab('users')">
+                        <span>👥</span>
+                        Users
+                    </button>
+                    <button class="tab-trigger" onclick="switchTab('tokens')">
+                        <span>🔑</span>
+                        Tokens
+                    </button>
+                </div>
+            </div>
+
+            <!-- Users Tab -->
+            <div id="usersTab" class="tab-content active">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Create New User</h3>
+                    </div>
+                    <div id="userAlert" class="hidden"></div>
+                    <form onsubmit="handleCreateUser(event)">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label class="form-label">First Name</label>
+                                <input type="text" class="form-input" id="firstName" placeholder="." required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Last Name</label>
+                                <input type="text" class="form-input" id="lastName" placeholder="." required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-input" id="email" placeholder="user@example.com" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <span>➕</span>
+                            Create User
+                        </button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">All Users</h3>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTable">
+                                <tr>
+                                    <td colspan="4" style="text-align: center; color: var(--text-secondary);">
+                                        No users yet
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tokens Tab -->
+            <div id="tokensTab" class="tab-content">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Generate Access Token</h3>
+                    </div>
+                    <div id="tokenAlert" class="hidden"></div>
+                    <form onsubmit="handleCreateToken(event)">
+                        <div class="form-group">
+                            <label class="form-label">Select User</label>
+                            <select class="form-select" id="tokenUserId" required>
+                                <option value="">Select a user</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <span>🔑</span>
+                            Generate Token
+                        </button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">All Tokens</h3>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Token</th>
+                                    <th>User</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tokensTable">
+                                <tr>
+                                    <td colspan="5" style="text-align: center; color: var(--text-secondary);">
+                                        No tokens yet
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Admin Credentials
+        const ADMIN_CREDENTIALS = {
+            username: 'BACK-BENCHERS-17',
+            password: 'Chandan_Patel'
+        };
+
+        // Data Storage
+        let users = JSON.parse(localStorage.getItem('admin_users')) || [];
+        let tokens = JSON.parse(localStorage.getItem('admin_tokens')) || [];
+
+        // Check authentication
+        function checkAuth() {
+            const isAdmin = sessionStorage.getItem('isAdmin');
+            if (isAdmin === 'true') {
+                showAdminPanel();
+            }
+        }
+
+        // Login Handler
+        function handleLogin(event) {
+            event.preventDefault();
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+            const errorDiv = document.getElementById('loginError');
+
+            if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
+                sessionStorage.setItem('isAdmin', 'true');
+                errorDiv.classList.add('hidden');
+                showAdminPanel();
+            } else {
+                errorDiv.classList.remove('hidden');
+            }
+        }
+
+        // Logout Handler
+        function handleLogout() {
+            sessionStorage.removeItem('isAdmin');
+            document.getElementById('loginScreen').classList.remove('hidden');
+            document.getElementById('adminPanel').classList.add('hidden');
+        }
+
+        // Show Admin Panel
+        function showAdminPanel() {
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('adminPanel').classList.remove('hidden');
+            loadAllData();
+        }
+
+        // Switch Tabs
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-trigger').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tabName + 'Tab').classList.add('active');
+        }
+
+        // Show Alert
+        function showAlert(elementId, message, isError = false) {
+            const alertDiv = document.getElementById(elementId);
+            alertDiv.textContent = message;
+            alertDiv.className = isError ? 'alert alert-error' : 'alert alert-success';
+            alertDiv.classList.remove('hidden');
+            
+            setTimeout(() => {
+                alertDiv.classList.add('hidden');
+            }, 5000);
+        }
+
+        // Generate ID
+        function generateId() {
+            return 'id_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        // Generate Token
+        function generateToken() {
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            let token = 'tok_';
+            for (let i = 0; i < 32; i++) {
+                token += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return token;
+        }
+
+        // Create User
+        function handleCreateUser(event) {
+            event.preventDefault();
+            
+            const firstName = document.getElementById('firstName').value;
+            const lastName = document.getElementById('lastName').value;
+            const email = document.getElementById('email').value;
+
+            // Check if email exists
+            if (users.find(u => u.email === email)) {
+                showAlert('userAlert', 'User with this email already exists', true);
+                return;
+            }
+
+            const newUser = {
+                id: generateId(),
+                firstName,
+                lastName,
+                email,
+                createdAt: new Date().toISOString()
+            };
+
+            users.push(newUser);
+            localStorage.setItem('admin_users', JSON.stringify(users));
+            
+            showAlert('userAlert', 'User created successfully ✅');
+            event.target.reset();
+            loadUsers();
+            updateTokenUserSelect();
+        }
+
+        // Delete User
+        function deleteUser(userId) {
+            if (confirm('Delete this user? All their tokens will also be deleted.')) {
+                users = users.filter(u => u.id !== userId);
+                tokens = tokens.filter(t => t.userId !== userId);
+                
+                localStorage.setItem('admin_users', JSON.stringify(users));
+                localStorage.setItem('admin_tokens', JSON.stringify(tokens));
+                
+                loadAllData();
+            }
+        }
+
+        // Load Users
+        function loadUsers() {
+            const tbody = document.getElementById('usersTable');
+            
+            if (users.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" style="text-align: center; color: var(--text-secondary);">
+                            No users yet
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = users.map(user => `
+                <tr>
+                    <td>${user.firstName} ${user.lastName}</td>
+                    <td>${user.email}</td>
+                    <td>${new Date(user.createdAt).toLocaleDateString()}</td>
+                    <td>
+                        <button class="btn btn-danger" onclick="deleteUser('${user.id}')">
+                            <span>🗑️</span>
+                            Delete
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Create Token
+        function handleCreateToken(event) {
+            event.preventDefault();
+            
+            const userId = document.getElementById('tokenUserId').value;
+            const user = users.find(u => u.id === userId);
+            
+            if (!user) {
+                showAlert('tokenAlert', 'Please select a user', true);
+                return;
+            }
+
+            const newToken = {
+                id: generateId(),
+                token: generateToken(),
+                userId,
+                isActive: true,
+                createdAt: new Date().toISOString()
+            };
+
+            tokens.push(newToken);
+            localStorage.setItem('admin_tokens', JSON.stringify(tokens));
+            
+            showAlert('tokenAlert', `Token created: ${newToken.token}`);
+            event.target.reset();
+            loadTokens();
+        }
+
+        // Toggle Token Status
+        function toggleToken(tokenId) {
+            const token = tokens.find(t => t.id === tokenId);
+            if (token) {
+                token.isActive = !token.isActive;
+                localStorage.setItem('admin_tokens', JSON.stringify(tokens));
+                loadTokens();
+            }
+        }
+
+        // Delete Token
+        function deleteToken(tokenId) {
+            if (confirm('Delete this token?')) {
+                tokens = tokens.filter(t => t.id !== tokenId);
+                localStorage.setItem('admin_tokens', JSON.stringify(tokens));
+                loadTokens();
+            }
+        }
+
+        // Copy Token
+        function copyToken(token) {
+            navigator.clipboard.writeText(token).then(() => {
+                alert('Token copied to clipboard!');
+            });
+        }
+
+        // Load Tokens
+        function loadTokens() {
+            const tbody = document.getElementById('tokensTable');
+            
+            if (tokens.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align: center; color: var(--text-secondary);">
+                            No tokens yet
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = tokens.map(token => {
+                const user = users.find(u => u.id === token.userId);
+                return `
+                    <tr>
+                        <td>
+                            <div class="flex items-center gap-2">
+                                <code style="font-size: 12px;">${token.token.substr(0, 20)}...</code>
+                                <button class="btn btn-ghost" style="padding: 4px 8px;" onclick="copyToken('${token.token}')">
+                                    📋
+                                </button>
+                            </div>
+                        </td>
+                        <td>${user ? user.email : 'Unknown'}</td>
+                        <td>
+                            <span class="badge ${token.isActive ? 'badge-active' : 'badge-inactive'}">
+                                ${token.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                        </td>
+                        <td>${new Date(token.createdAt).toLocaleDateString()}</td>
+                        <td>
+                            <div class="flex gap-2">
+                                <button class="btn btn-ghost" onclick="toggleToken('${token.id}')">
+                                    ${token.isActive ? 'Deactivate' : 'Activate'}
+                                </button>
+                                <button class="btn btn-danger" onclick="deleteToken('${token.id}')">
+                                    🗑️
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Update Token User Select
+        function updateTokenUserSelect() {
+            const select = document.getElementById('tokenUserId');
+            select.innerHTML = '<option value="">Select a user</option>';
+            
+            users.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.id;
+                option.textContent = `${user.firstName} ${user.lastName} (${user.email})`;
+                select.appendChild(option);
+            });
+        }
+
+        // Load All Data
+        function loadAllData() {
+            loadUsers();
+            loadTokens();
+            updateTokenUserSelect();
+        }
+
+        // Initialize
+        checkAuth();
+    </script>
+</body>
+</html>
