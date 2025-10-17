@@ -515,15 +515,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
               });
             });
             
-            // Install dependencies in venv
+            // Install dependencies using python -m pip (more reliable)
             await new Promise<void>((resolve, reject) => {
               let stdoutData = '';
               let stderrData = '';
               
-              const pipPath = path.join(venvPath, 'bin', 'pip');
-              console.log(`[Bot Deploy] Installing dependencies in virtual environment`);
+              console.log(`[Bot Deploy] Installing dependencies using venv pip`);
               
-              const installer = spawn(pipPath, ['install', '-r', 'requirements.txt'], {
+              // Use the venv's python to run pip
+              const pythonPath = path.join(venvPath, 'bin', 'python');
+              const installer = spawn(pythonPath, ['-m', 'pip', 'install', '-r', 'requirements.txt'], {
                 cwd: botDirectory,
                 stdio: 'pipe',
                 env: { ...process.env }
