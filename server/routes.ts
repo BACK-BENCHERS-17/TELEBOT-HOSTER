@@ -275,14 +275,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (runtime === 'python' && hasRequirementsTxt) {
         try {
           await new Promise<void>((resolve, reject) => {
-            const pip = spawn('pip3', ['install', '-r', 'requirements.txt'], {
+            // Use python3 -m pip for better compatibility
+            const pip = spawn('python3', ['-m', 'pip', 'install', '-r', 'requirements.txt'], {
               cwd: botDirectory,
               stdio: 'pipe'
             });
             
             pip.on('error', (err) => {
-              console.error(`[Bot Deploy] Failed to spawn pip3:`, err);
-              reject(new Error(`Failed to start pip3: ${err.message}. Make sure Python is installed.`));
+              console.error(`[Bot Deploy] Failed to spawn pip:`, err);
+              reject(new Error(`Failed to start pip: ${err.message}. Make sure Python is installed.`));
             });
             
             pip.on('close', (code: number | null) => {
