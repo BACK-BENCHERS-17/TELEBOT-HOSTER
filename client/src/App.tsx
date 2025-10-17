@@ -9,12 +9,16 @@ import NotFound from "@/pages/not-found";
 import Landing from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
 import BotManagement from "@/pages/bot-management";
+import TokenLogin from "@/pages/token-login";
+import AdminPanel from "@/pages/admin";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
 
   return (
     <Switch>
+      <Route path="/admin" component={AdminPanel} />
+      <Route path="/token-login" component={TokenLogin} />
       {isLoading || !isAuthenticated ? (
         <Route path="/" component={Landing} />
       ) : (
