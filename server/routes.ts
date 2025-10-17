@@ -125,6 +125,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         hasPackageJson: boolean; 
         dependencyDir?: string;
         entryPointPath?: string;
+        foundFiles?: string[];
       }> => {
         const files = await promisify(fs.readdir)(dir);
         let hasRequirementsTxt = false;
@@ -132,35 +133,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let localEntryPoint: string | undefined;
         let dependencyDir: string | undefined;
         let entryPointPath: string | undefined;
+        let foundFiles: string[] = [];
         
         // Check files in current directory
+        let pythonFiles: string[] = [];
+        let jsFiles: string[] = [];
+        
         for (const file of files) {
           const filePath = path.join(dir, file);
           const stat = await promisify(fs.stat)(filePath);
           
           if (!stat.isDirectory()) {
-            if (file === 'requirements.txt') {
+            foundFiles.push(file);
+            
+            const lowerFile = file.toLowerCase();
+            
+            if (lowerFile === 'requirements.txt') {
               hasRequirementsTxt = true;
               dependencyDir = dir;
             }
-            if (file === 'package.json') {
+            if (lowerFile === 'package.json') {
               hasPackageJson = true;
               dependencyDir = dir;
             }
-            // Check for entry points
-            if (file === 'main.py' || file === 'bot.py' || file === 'app.py' || file === '__main__.py') {
+            // Check for preferred entry points (case-insensitive)
+            if (lowerFile === 'main.py' || lowerFile === 'bot.py' || lowerFile === 'app.py' || lowerFile === '__main__.py') {
               localEntryPoint = file;
             }
-            if (file === 'index.js' || file === 'bot.js' || file === 'app.js' || file === 'main.js') {
+            if (lowerFile === 'index.js' || lowerFile === 'bot.js' || lowerFile === 'app.js' || lowerFile === 'main.js') {
               localEntryPoint = file;
             }
+            // Collect all Python and JS files as fallback options
+            if (lowerFile.endsWith('.py')) {
+              pythonFiles.push(file);
+            }
+            if (lowerFile.endsWith('.js')) {
+              jsFiles.push(file);
+            }
+          }
+        }
+        
+        // If no preferred entry point found, use any .py or .js file as fallback
+        if (!localEntryPoint) {
+          if (hasRequirementsTxt && pythonFiles.length > 0) {
+            localEntryPoint = pythonFiles[0];
+          } else if (hasPackageJson && jsFiles.length > 0) {
+            localEntryPoint = jsFiles[0];
           }
         }
         
         // If we found both dependency manifest and entry point here, use this directory
         if ((hasRequirementsTxt || hasPackageJson) && localEntryPoint) {
           entryPointPath = path.relative(basePath, path.join(dir, localEntryPoint));
-          return { hasRequirementsTxt, hasPackageJson, dependencyDir, entryPointPath };
+          return { hasRequirementsTxt, hasPackageJson, dependencyDir, entryPointPath, foundFiles };
         }
         
         // If we found dependency manifest but no entry point, search subdirectories for entry point
@@ -177,14 +202,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     hasRequirementsTxt,
                     hasPackageJson,
                     dependencyDir,
-                    entryPointPath: subResult.entryPointPath
+                    entryPointPath: subResult.entryPointPath,
+                    foundFiles: [...foundFiles, ...(subResult.foundFiles || [])]
                   };
                 }
               }
             }
+          } else {
+            // Calculate relative path for local entry point
+            entryPointPath = path.relative(basePath, path.join(dir, localEntryPoint));
           }
-          // Return with whatever we found (may have localEntryPoint or not)
-          return { hasRequirementsTxt, hasPackageJson, dependencyDir, entryPointPath: localEntryPoint };
+          // Return with whatever we found
+          return { hasRequirementsTxt, hasPackageJson, dependencyDir, entryPointPath, foundFiles };
         }
         
         // No manifest found, recursively search subdirectories
@@ -194,15 +223,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (stat.isDirectory()) {
             const subResult = await findBotFiles(filePath, basePath);
             if (subResult.hasRequirementsTxt || subResult.hasPackageJson) {
-              return subResult;
+              return { ...subResult, foundFiles: [...foundFiles, ...(subResult.foundFiles || [])] };
             }
           }
         }
         
-        return { hasRequirementsTxt, hasPackageJson };
+        return { hasRequirementsTxt, hasPackageJson, foundFiles };
       };
       
-      const { hasRequirementsTxt, hasPackageJson, dependencyDir, entryPointPath: foundEntryPoint } = await findBotFiles(extractPath, extractPath);
+      const { hasRequirementsTxt, hasPackageJson, dependencyDir, entryPointPath: foundEntryPoint, foundFiles } = await findBotFiles(extractPath, extractPath);
       botDirectory = dependencyDir || extractPath;
       // Make entryPoint relative to botDirectory, not extractPath
       if (foundEntryPoint) {
@@ -210,12 +239,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         entryPointPath = path.relative(botDirectory, fullEntryPath);
       }
       
+      console.log(`[Bot Deploy] Found files: ${foundFiles?.join(', ') || 'none'}`);
+      console.log(`[Bot Deploy] Entry point: ${entryPointPath || 'not found'}`);
+      
       // Validate runtime matches
       if (runtime === 'python' && !hasRequirementsTxt) {
         await unlinkAsync(zipPath);
         await promisify(fs.rm)(extractPath, { recursive: true, force: true });
         return res.status(400).json({ 
-          message: "Error: requirements.txt not found. Python bots must include requirements.txt" 
+          message: `Error: requirements.txt not found. Python bots must include requirements.txt. Found files: ${foundFiles?.join(', ') || 'none'}` 
         });
       }
       
@@ -223,7 +255,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await unlinkAsync(zipPath);
         await promisify(fs.rm)(extractPath, { recursive: true, force: true });
         return res.status(400).json({ 
-          message: "Error: package.json not found. Node.js bots must include package.json" 
+          message: `Error: package.json not found. Node.js bots must include package.json. Found files: ${foundFiles?.join(', ') || 'none'}` 
         });
       }
       
@@ -235,45 +267,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ? 'main.py, bot.py, app.py, or __main__.py'
           : 'index.js, bot.js, app.js, or main.js';
         return res.status(400).json({ 
-          message: `Error: No entry point found. ${runtime === 'python' ? 'Python' : 'Node.js'} bots must include ${expectedFiles}` 
+          message: `Error: No entry point found. ${runtime === 'python' ? 'Python' : 'Node.js'} bots must include ${expectedFiles}. Found files: ${foundFiles?.join(', ') || 'none'}` 
         });
       }
       
       // Install dependencies
       if (runtime === 'python' && hasRequirementsTxt) {
-        await new Promise<void>((resolve, reject) => {
-          const pip = spawn('pip3', ['install', '-r', 'requirements.txt'], {
-            cwd: botDirectory,
-            stdio: 'pipe'
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const pip = spawn('pip3', ['install', '-r', 'requirements.txt'], {
+              cwd: botDirectory,
+              stdio: 'pipe'
+            });
+            
+            pip.on('error', (err) => {
+              console.error(`[Bot Deploy] Failed to spawn pip3:`, err);
+              reject(new Error(`Failed to start pip3: ${err.message}. Make sure Python is installed.`));
+            });
+            
+            pip.on('close', (code: number | null) => {
+              if (code === 0) {
+                console.log(`✓ Installed Python dependencies for ${name}`);
+                resolve();
+              } else {
+                reject(new Error(`Failed to install Python dependencies (exit code: ${code})`));
+              }
+            });
           });
-          
-          pip.on('close', (code: number | null) => {
-            if (code === 0) {
-              console.log(`✓ Installed Python dependencies for ${name}`);
-              resolve();
-            } else {
-              reject(new Error(`Failed to install Python dependencies (exit code: ${code})`));
-            }
+        } catch (error: any) {
+          console.error(`[Bot Deploy] Dependency installation error:`, error);
+          await unlinkAsync(zipPath);
+          await promisify(fs.rm)(extractPath, { recursive: true, force: true });
+          return res.status(500).json({ 
+            message: `Failed to install dependencies: ${error.message}` 
           });
-        });
+        }
       }
       
       if (runtime === 'nodejs' && hasPackageJson) {
-        await new Promise<void>((resolve, reject) => {
-          const npm = spawn('npm', ['install'], {
-            cwd: botDirectory,
-            stdio: 'pipe'
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const npm = spawn('npm', ['install'], {
+              cwd: botDirectory,
+              stdio: 'pipe'
+            });
+            
+            npm.on('error', (err: any) => {
+              console.error(`[Bot Deploy] Failed to spawn npm:`, err);
+              reject(new Error(`Failed to start npm: ${err.message}`));
+            });
+            
+            npm.on('close', (code: number | null) => {
+              if (code === 0) {
+                console.log(`✓ Installed Node.js dependencies for ${name}`);
+                resolve();
+              } else {
+                reject(new Error(`Failed to install Node.js dependencies (exit code: ${code})`));
+              }
+            });
           });
-          
-          npm.on('close', (code: number | null) => {
-            if (code === 0) {
-              console.log(`✓ Installed Node.js dependencies for ${name}`);
-              resolve();
-            } else {
-              reject(new Error(`Failed to install Node.js dependencies (exit code: ${code})`));
-            }
+        } catch (error: any) {
+          console.error(`[Bot Deploy] Dependency installation error:`, error);
+          await unlinkAsync(zipPath);
+          await promisify(fs.rm)(extractPath, { recursive: true, force: true });
+          return res.status(500).json({ 
+            message: `Failed to install dependencies: ${error.message}` 
           });
-        });
+        }
       }
       
       // Create bot record
