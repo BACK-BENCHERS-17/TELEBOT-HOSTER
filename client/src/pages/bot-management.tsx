@@ -42,24 +42,22 @@ export default function BotManagement() {
   const { toast } = useToast();
   const logsEndRef = useRef<HTMLDivElement>(null);
   const [logs, setLogs] = useState<string[]>([]);
-  const [envVars, setEnvVars] = useState<EnvironmentVariable[]>([]);
   const [newEnvKey, setNewEnvKey] = useState("");
   const [newEnvValue, setNewEnvValue] = useState("");
   const [showValues, setShowValues] = useState<Record<number, boolean>>({});
 
+  // Validate botId - ensure it's not null, undefined, or the string "null"
+  const isValidBotId = botId && botId !== 'null' && botId !== 'undefined';
+
   const { data: bot, isLoading } = useQuery<BotType>({
     queryKey: ['/api/bots', botId],
-    enabled: !!botId,
+    enabled: isValidBotId,
   });
 
-  const { data: envVarsData = [] } = useQuery<EnvironmentVariable[]>({
+  const { data: envVars = [] } = useQuery<EnvironmentVariable[]>({
     queryKey: ['/api/bots', botId, 'env'],
-    enabled: !!botId,
+    enabled: isValidBotId,
   });
-
-  useEffect(() => {
-    setEnvVars(envVarsData);
-  }, [envVarsData]);
 
   // WebSocket for real-time logs
   useEffect(() => {

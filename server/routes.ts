@@ -490,13 +490,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
           } else {
             // Create virtual environment for pip-based bots
-            const venvPath = path.join(botDirectory, '.venv');
+            const absoluteBotDir = path.resolve(botDirectory);
+            const venvPath = path.join(absoluteBotDir, '.venv');
             console.log(`[Bot Deploy] Creating virtual environment at ${venvPath}`);
             
             // Create venv
             await new Promise<void>((resolve, reject) => {
               const venv = spawn('python3', ['-m', 'venv', '.venv'], {
-                cwd: botDirectory,
+                cwd: absoluteBotDir,
                 stdio: 'pipe'
               });
               
@@ -522,10 +523,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
               
               console.log(`[Bot Deploy] Installing dependencies using venv pip`);
               
-              // Use the venv's python to run pip
-              const pythonPath = path.join(venvPath, 'bin', 'python');
+              // Use the venv's python to run pip - use absolute path
+              const pythonPath = path.resolve(path.join(venvPath, 'bin', 'python'));
+              console.log(`[Bot Deploy] Using Python at: ${pythonPath}`);
+              
+              // Check if python exists in venv
+              if (!fs.existsSync(pythonPath)) {
+                reject(new Error(`Virtual environment Python not found at ${pythonPath}`));
+                return;
+              }
+              
               const installer = spawn(pythonPath, ['-m', 'pip', 'install', '-r', 'requirements.txt'], {
-                cwd: botDirectory,
+                cwd: absoluteBotDir,
                 stdio: 'pipe',
                 env: { ...process.env }
               });
@@ -905,7 +914,7 @@ async function launchBot(botId: number) {
   // Build full path to entry point
   const extractedPath = bot.extractedPath!;
   const fullEntryPath = path.join(extractedPath, entryPointRelativePath);
-  const workingDir = path.dirname(fullEntryPath);
+  const workingDir = path.resolve(path.dirname(fullEntryPath));
   const entryFileName = path.basename(fullEntryPath);
   
   // Start bot process
@@ -913,9 +922,9 @@ async function launchBot(botId: number) {
   let args: string[];
   
   if (bot.runtime === 'python') {
-    // Check if virtual environment exists
-    const venvPythonPath = path.join(workingDir, '.venv', 'bin', 'python');
-    const uvPythonPath = path.join(workingDir, '.venv', 'bin', 'python');
+    // Check if virtual environment exists - use absolute paths
+    const venvPythonPath = path.resolve(path.join(workingDir, '.venv', 'bin', 'python'));
+    const uvPythonPath = path.resolve(path.join(workingDir, '.venv', 'bin', 'python'));
     
     try {
       await promisify(fs.access)(venvPythonPath, fs.constants.X_OK);
