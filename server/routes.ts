@@ -315,6 +315,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
               hasRequirementsTxt = true;
               dependencyDir = dir;
             }
+            if (lowerFile === 'pyproject.toml' || lowerFile === 'uv.lock') {
+              hasRequirementsTxt = true; // Treat pyproject.toml/uv.lock as Python dependencies
+              dependencyDir = dir;
+            }
             if (lowerFile === 'package.json') {
               hasPackageJson = true;
               dependencyDir = dir;
@@ -410,7 +414,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await unlinkAsync(zipPath);
         await promisify(fs.rm)(extractPath, { recursive: true, force: true });
         return res.status(400).json({ 
-          message: `Error: requirements.txt not found. Python bots must include requirements.txt. Found files: ${foundFiles?.join(', ') || 'none'}` 
+          message: `Error: requirements.txt, pyproject.toml, or uv.lock not found. Python bots must include one of these files. Found files: ${foundFiles?.join(', ') || 'none'}` 
         });
       }
       
@@ -437,24 +441,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Install dependencies
       if (runtime === 'python' && hasRequirementsTxt) {
         try {
+          // Check if we have uv.lock or pyproject.toml (use uv) or requirements.txt (use pip)
+          const files = await promisify(fs.readdir)(botDirectory);
+          const hasUvLock = files.some(f => f.toLowerCase() === 'uv.lock');
+          const hasPyproject = files.some(f => f.toLowerCase() === 'pyproject.toml');
+          const hasRequirements = files.some(f => f.toLowerCase() === 'requirements.txt');
+          
+          let useUv = hasUvLock || (hasPyproject && !hasRequirements);
+          
           await new Promise<void>((resolve, reject) => {
-            // Use python3 -m pip for better compatibility
-            const pip = spawn('python3', ['-m', 'pip', 'install', '-r', 'requirements.txt'], {
-              cwd: botDirectory,
-              stdio: 'pipe'
+            let stdoutData = '';
+            let stderrData = '';
+            
+            let installer;
+            if (useUv) {
+              console.log(`[Bot Deploy] Using uv to install dependencies`);
+              // Use uv sync to install dependencies from pyproject.toml/uv.lock
+              installer = spawn('uv', ['sync'], {
+                cwd: botDirectory,
+                stdio: 'pipe',
+                env: { ...process.env }
+              });
+            } else {
+              console.log(`[Bot Deploy] Using pip to install dependencies`);
+              // Use python3 -m pip with --user flag for user-level installation
+              installer = spawn('python3', ['-m', 'pip', 'install', '--user', '--no-cache-dir', '-r', 'requirements.txt'], {
+                cwd: botDirectory,
+                stdio: 'pipe',
+                env: { ...process.env }
+              });
+            }
+            
+            installer.stdout?.on('data', (data) => {
+              stdoutData += data.toString();
+              console.log(`[Bot Deploy] ${useUv ? 'uv' : 'pip'} stdout: ${data.toString().trim()}`);
             });
             
-            pip.on('error', (err) => {
-              console.error(`[Bot Deploy] Failed to spawn pip:`, err);
-              reject(new Error(`Failed to start pip: ${err.message}. Make sure Python is installed.`));
+            installer.stderr?.on('data', (data) => {
+              stderrData += data.toString();
+              console.error(`[Bot Deploy] ${useUv ? 'uv' : 'pip'} stderr: ${data.toString().trim()}`);
             });
             
-            pip.on('close', (code: number | null) => {
+            installer.on('error', (err) => {
+              console.error(`[Bot Deploy] Failed to spawn ${useUv ? 'uv' : 'pip'}:`, err);
+              reject(new Error(`Failed to start ${useUv ? 'uv' : 'pip'}: ${err.message}`));
+            });
+            
+            installer.on('close', (code: number | null) => {
               if (code === 0) {
                 console.log(`✓ Installed Python dependencies for ${name}`);
                 resolve();
               } else {
-                reject(new Error(`Failed to install Python dependencies (exit code: ${code})`));
+                const errorMsg = stderrData || stdoutData || `Unknown error (exit code: ${code})`;
+                console.error(`[Bot Deploy] ${useUv ? 'uv' : 'pip'} failed with code ${code}. Error: ${errorMsg}`);
+                reject(new Error(`Failed to install Python dependencies: ${errorMsg}`));
               }
             });
           });
