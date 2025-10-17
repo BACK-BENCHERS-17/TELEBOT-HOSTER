@@ -9,8 +9,10 @@ import fs from "fs";
 import { promisify } from "util";
 import unzipper from "unzipper";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
-import { insertBotSchema, insertEnvVarSchema } from "@shared/schema";
+import { setupAuth, isAuthenticated, isAdmin } from "./tokenAuth";
+import { ADMIN_CREDENTIALS, DEVELOPER_CONTACT } from "./adminConfig";
+import { insertBotSchema, insertEnvVarSchema, insertAccessTokenSchema } from "@shared/schema";
+import { nanoid } from "nanoid";
 
 const unlinkAsync = promisify(fs.unlink);
 const mkdirAsync = promisify(fs.mkdir);
@@ -29,24 +31,185 @@ const wsClients = new Map<string, Set<WebSocket>>();
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication
-  await setupAuth(app);
+  setupAuth(app);
 
-  // Auth routes
+  // Token login route
+  app.post('/api/auth/token-login', async (req: any, res) => {
+    try {
+      const { token } = req.body;
+      
+      if (!token) {
+        return res.status(400).json({ message: "Token is required" });
+      }
+
+      const accessToken = await storage.getTokenByValue(token);
+      
+      if (!accessToken || accessToken.isActive !== 'true') {
+        return res.status(401).json({ message: "Invalid or inactive token" });
+      }
+
+      const user = await storage.getUser(accessToken.userId);
+      
+      if (!user) {
+        return res.status(401).json({ message: "User not found" });
+      }
+
+      req.session.userId = user.id;
+      req.session.save();
+      
+      res.json({ user });
+    } catch (error) {
+      console.error("Error during token login:", error);
+      res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  // Admin login route
+  app.post('/api/auth/admin-login', async (req: any, res) => {
+    try {
+      const { username, password } = req.body;
+      
+      if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
+        req.session.isAdmin = true;
+        req.session.save();
+        res.json({ success: true });
+      } else {
+        res.status(401).json({ message: "Invalid credentials" });
+      }
+    } catch (error) {
+      console.error("Error during admin login:", error);
+      res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  // Logout route
+  app.post('/api/auth/logout', async (req: any, res) => {
+    req.session.destroy(() => {
+      res.json({ success: true });
+    });
+  });
+
+  // Get current user
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      res.json(user);
+      res.json(req.user);
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
     }
   });
 
+  // Check admin status
+  app.get('/api/auth/admin-check', async (req: any, res) => {
+    res.json({ isAdmin: !!req.session.isAdmin });
+  });
+
+  // Get developer contact info
+  app.get('/api/auth/contact-info', async (req, res) => {
+    res.json({ contact: DEVELOPER_CONTACT });
+  });
+
+  // Admin routes for token management
+  app.get('/api/admin/users', isAdmin, async (req: any, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      res.json(users);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  app.get('/api/admin/tokens', isAdmin, async (req: any, res) => {
+    try {
+      const tokens = await storage.getAllTokens();
+      const tokensWithUsers = await Promise.all(
+        tokens.map(async (token) => {
+          const user = await storage.getUser(token.userId);
+          return { ...token, user };
+        })
+      );
+      res.json(tokensWithUsers);
+    } catch (error) {
+      console.error("Error fetching tokens:", error);
+      res.status(500).json({ message: "Failed to fetch tokens" });
+    }
+  });
+
+  app.post('/api/admin/users', isAdmin, async (req: any, res) => {
+    try {
+      const { email, firstName, lastName } = req.body;
+      
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ message: "User with this email already exists" });
+      }
+
+      const user = await storage.createUser({
+        email,
+        firstName,
+        lastName,
+      });
+      
+      res.json(user);
+    } catch (error) {
+      console.error("Error creating user:", error);
+      res.status(500).json({ message: "Failed to create user" });
+    }
+  });
+
+  app.post('/api/admin/tokens', isAdmin, async (req: any, res) => {
+    try {
+      const { userId } = req.body;
+      
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const token = nanoid(32);
+      const accessToken = await storage.createToken({
+        token,
+        userId,
+        isActive: 'true',
+        createdBy: 'admin',
+      });
+      
+      res.json(accessToken);
+    } catch (error) {
+      console.error("Error creating token:", error);
+      res.status(500).json({ message: "Failed to create token" });
+    }
+  });
+
+  app.patch('/api/admin/tokens/:id', isAdmin, async (req: any, res) => {
+    try {
+      const tokenId = parseInt(req.params.id);
+      const { isActive } = req.body;
+      
+      const updatedToken = await storage.updateToken(tokenId, { isActive });
+      res.json(updatedToken);
+    } catch (error) {
+      console.error("Error updating token:", error);
+      res.status(500).json({ message: "Failed to update token" });
+    }
+  });
+
+  app.delete('/api/admin/tokens/:id', isAdmin, async (req: any, res) => {
+    try {
+      const tokenId = parseInt(req.params.id);
+      await storage.deleteToken(tokenId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting token:", error);
+      res.status(500).json({ message: "Failed to delete token" });
+    }
+  });
+
   // Get all bots for current user
   app.get("/api/bots", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const bots = await storage.getBotsByUserId(userId);
       res.json(bots);
     } catch (error) {
@@ -66,7 +229,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check ownership
-      if (bot.userId !== req.user.claims.sub) {
+      if (bot.userId !== req.user.id) {
         return res.status(403).json({ message: "Forbidden" });
       }
       
@@ -80,7 +243,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Deploy bot (upload ZIP and create bot)
   app.post("/api/bots/deploy", isAuthenticated, upload.single('file'), async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { name, runtime } = req.body;
       const envVars = req.body.envVars ? JSON.parse(req.body.envVars) : [];
       
@@ -376,7 +539,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const botId = parseInt(req.params.id);
       const bot = await storage.getBotById(botId);
       
-      if (!bot || bot.userId !== req.user.claims.sub) {
+      if (!bot || bot.userId !== req.user.id) {
         return res.status(404).json({ message: "Bot not found" });
       }
       
@@ -398,7 +561,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const botId = parseInt(req.params.id);
       const bot = await storage.getBotById(botId);
       
-      if (!bot || bot.userId !== req.user.claims.sub) {
+      if (!bot || bot.userId !== req.user.id) {
         return res.status(404).json({ message: "Bot not found" });
       }
       
@@ -426,7 +589,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const botId = parseInt(req.params.id);
       const bot = await storage.getBotById(botId);
       
-      if (!bot || bot.userId !== req.user.claims.sub) {
+      if (!bot || bot.userId !== req.user.id) {
         return res.status(404).json({ message: "Bot not found" });
       }
       
@@ -462,7 +625,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const botId = parseInt(req.params.id);
       const bot = await storage.getBotById(botId);
       
-      if (!bot || bot.userId !== req.user.claims.sub) {
+      if (!bot || bot.userId !== req.user.id) {
         return res.status(404).json({ message: "Bot not found" });
       }
       
@@ -497,7 +660,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const botId = parseInt(req.params.id);
       const bot = await storage.getBotById(botId);
       
-      if (!bot || bot.userId !== req.user.claims.sub) {
+      if (!bot || bot.userId !== req.user.id) {
         return res.status(404).json({ message: "Bot not found" });
       }
       
@@ -515,7 +678,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const botId = parseInt(req.params.id);
       const bot = await storage.getBotById(botId);
       
-      if (!bot || bot.userId !== req.user.claims.sub) {
+      if (!bot || bot.userId !== req.user.id) {
         return res.status(404).json({ message: "Bot not found" });
       }
       
@@ -547,7 +710,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const envId = parseInt(req.params.envId);
       const bot = await storage.getBotById(botId);
       
-      if (!bot || bot.userId !== req.user.claims.sub) {
+      if (!bot || bot.userId !== req.user.id) {
         return res.status(404).json({ message: "Bot not found" });
       }
       
