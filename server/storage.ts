@@ -322,5 +322,8 @@ export class MemStorage implements IStorage {
   }
 }
 
-// Use in-memory storage to avoid database authentication issues
-export const storage = new MemStorage();
+// Import MongoDB storage
+import { MongoStorage } from './mongoStorage';
+
+// Use MongoDB storage
+export const storage = new MongoStorage();
