@@ -449,55 +449,113 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           let useUv = hasUvLock || (hasPyproject && !hasRequirements);
           
-          await new Promise<void>((resolve, reject) => {
-            let stdoutData = '';
-            let stderrData = '';
-            
-            let installer;
-            if (useUv) {
+          if (useUv) {
+            // Use uv to install dependencies
+            await new Promise<void>((resolve, reject) => {
+              let stdoutData = '';
+              let stderrData = '';
+              
               console.log(`[Bot Deploy] Using uv to install dependencies`);
-              // Use uv sync to install dependencies from pyproject.toml/uv.lock
-              installer = spawn('uv', ['sync'], {
+              const installer = spawn('uv', ['sync'], {
                 cwd: botDirectory,
                 stdio: 'pipe',
                 env: { ...process.env }
               });
-            } else {
-              console.log(`[Bot Deploy] Using pip to install dependencies`);
-              // Use python3 -m pip with --user flag for user-level installation
-              installer = spawn('python3', ['-m', 'pip', 'install', '--user', '--no-cache-dir', '-r', 'requirements.txt'], {
+              
+              installer.stdout?.on('data', (data) => {
+                stdoutData += data.toString();
+                console.log(`[Bot Deploy] uv stdout: ${data.toString().trim()}`);
+              });
+              
+              installer.stderr?.on('data', (data) => {
+                stderrData += data.toString();
+                console.error(`[Bot Deploy] uv stderr: ${data.toString().trim()}`);
+              });
+              
+              installer.on('error', (err) => {
+                console.error(`[Bot Deploy] Failed to spawn uv:`, err);
+                reject(new Error(`Failed to start uv: ${err.message}`));
+              });
+              
+              installer.on('close', (code: number | null) => {
+                if (code === 0) {
+                  console.log(`✓ Installed Python dependencies for ${name}`);
+                  resolve();
+                } else {
+                  const errorMsg = stderrData || stdoutData || `Unknown error (exit code: ${code})`;
+                  console.error(`[Bot Deploy] uv failed with code ${code}. Error: ${errorMsg}`);
+                  reject(new Error(`Failed to install Python dependencies: ${errorMsg}`));
+                }
+              });
+            });
+          } else {
+            // Create virtual environment for pip-based bots
+            const venvPath = path.join(botDirectory, '.venv');
+            console.log(`[Bot Deploy] Creating virtual environment at ${venvPath}`);
+            
+            // Create venv
+            await new Promise<void>((resolve, reject) => {
+              const venv = spawn('python3', ['-m', 'venv', '.venv'], {
+                cwd: botDirectory,
+                stdio: 'pipe'
+              });
+              
+              venv.on('error', (err) => {
+                console.error(`[Bot Deploy] Failed to create venv:`, err);
+                reject(new Error(`Failed to create virtual environment: ${err.message}`));
+              });
+              
+              venv.on('close', (code: number | null) => {
+                if (code === 0) {
+                  console.log(`[Bot Deploy] Virtual environment created`);
+                  resolve();
+                } else {
+                  reject(new Error(`Failed to create virtual environment (exit code: ${code})`));
+                }
+              });
+            });
+            
+            // Install dependencies in venv
+            await new Promise<void>((resolve, reject) => {
+              let stdoutData = '';
+              let stderrData = '';
+              
+              const pipPath = path.join(venvPath, 'bin', 'pip');
+              console.log(`[Bot Deploy] Installing dependencies in virtual environment`);
+              
+              const installer = spawn(pipPath, ['install', '-r', 'requirements.txt'], {
                 cwd: botDirectory,
                 stdio: 'pipe',
                 env: { ...process.env }
               });
-            }
-            
-            installer.stdout?.on('data', (data) => {
-              stdoutData += data.toString();
-              console.log(`[Bot Deploy] ${useUv ? 'uv' : 'pip'} stdout: ${data.toString().trim()}`);
+              
+              installer.stdout?.on('data', (data) => {
+                stdoutData += data.toString();
+                console.log(`[Bot Deploy] pip stdout: ${data.toString().trim()}`);
+              });
+              
+              installer.stderr?.on('data', (data) => {
+                stderrData += data.toString();
+                console.error(`[Bot Deploy] pip stderr: ${data.toString().trim()}`);
+              });
+              
+              installer.on('error', (err) => {
+                console.error(`[Bot Deploy] Failed to spawn pip:`, err);
+                reject(new Error(`Failed to start pip: ${err.message}`));
+              });
+              
+              installer.on('close', (code: number | null) => {
+                if (code === 0) {
+                  console.log(`✓ Installed Python dependencies for ${name}`);
+                  resolve();
+                } else {
+                  const errorMsg = stderrData || stdoutData || `Unknown error (exit code: ${code})`;
+                  console.error(`[Bot Deploy] pip failed with code ${code}. Error: ${errorMsg}`);
+                  reject(new Error(`Failed to install Python dependencies: ${errorMsg}`));
+                }
+              });
             });
-            
-            installer.stderr?.on('data', (data) => {
-              stderrData += data.toString();
-              console.error(`[Bot Deploy] ${useUv ? 'uv' : 'pip'} stderr: ${data.toString().trim()}`);
-            });
-            
-            installer.on('error', (err) => {
-              console.error(`[Bot Deploy] Failed to spawn ${useUv ? 'uv' : 'pip'}:`, err);
-              reject(new Error(`Failed to start ${useUv ? 'uv' : 'pip'}: ${err.message}`));
-            });
-            
-            installer.on('close', (code: number | null) => {
-              if (code === 0) {
-                console.log(`✓ Installed Python dependencies for ${name}`);
-                resolve();
-              } else {
-                const errorMsg = stderrData || stdoutData || `Unknown error (exit code: ${code})`;
-                console.error(`[Bot Deploy] ${useUv ? 'uv' : 'pip'} failed with code ${code}. Error: ${errorMsg}`);
-                reject(new Error(`Failed to install Python dependencies: ${errorMsg}`));
-              }
-            });
-          });
+          }
         } catch (error: any) {
           console.error(`[Bot Deploy] Dependency installation error:`, error);
           await unlinkAsync(zipPath);
@@ -854,7 +912,27 @@ async function launchBot(botId: number) {
   let args: string[];
   
   if (bot.runtime === 'python') {
-    command = 'python3';
+    // Check if virtual environment exists
+    const venvPythonPath = path.join(workingDir, '.venv', 'bin', 'python');
+    const uvPythonPath = path.join(workingDir, '.venv', 'bin', 'python');
+    
+    try {
+      await promisify(fs.access)(venvPythonPath, fs.constants.X_OK);
+      // venv exists and is executable, use it
+      command = venvPythonPath;
+      console.log(`[Bot ${botId}] Using virtual environment Python: ${venvPythonPath}`);
+    } catch {
+      // Check for uv's .venv
+      try {
+        await promisify(fs.access)(uvPythonPath, fs.constants.X_OK);
+        command = uvPythonPath;
+        console.log(`[Bot ${botId}] Using uv virtual environment Python: ${uvPythonPath}`);
+      } catch {
+        // No venv, use system python
+        command = 'python3';
+        console.log(`[Bot ${botId}] Using system Python`);
+      }
+    }
     args = [entryFileName];
   } else {
     command = 'node';
