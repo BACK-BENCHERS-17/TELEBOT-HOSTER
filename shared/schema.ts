@@ -24,7 +24,7 @@ export const sessions = pgTable(
   (table) => [index("IDX_session_expire").on(table.expire)],
 );
 
-// User storage table - Required for Replit Auth
+// User storage table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: varchar("email").unique(),
@@ -37,6 +37,32 @@ export const users = pgTable("users", {
 
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
+
+// Access Tokens table - For token-based authentication
+export const accessTokens = pgTable("access_tokens", {
+  id: serial("id").primaryKey(),
+  token: varchar("token", { length: 255 }).notNull().unique(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  isActive: varchar("is_active", { length: 10 }).notNull().default('true'),
+  createdBy: varchar("created_by").notNull().default('admin'),
+  createdAt: timestamp("created_at").defaultNow(),
+  expiresAt: timestamp("expires_at"),
+});
+
+export const accessTokensRelations = relations(accessTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [accessTokens.userId],
+    references: [users.id],
+  }),
+}));
+
+export type AccessToken = typeof accessTokens.$inferSelect;
+export type InsertAccessToken = typeof accessTokens.$inferInsert;
+
+export const insertAccessTokenSchema = createInsertSchema(accessTokens).omit({
+  id: true,
+  createdAt: true,
+});
 
 // Bots table - Stores deployed Telegram bots
 export const bots = pgTable("bots", {
@@ -65,6 +91,7 @@ export const botsRelations = relations(bots, ({ one, many }) => ({
 
 export const usersRelations = relations(users, ({ many }) => ({
   bots: many(bots),
+  accessTokens: many(accessTokens),
 }));
 
 export type Bot = typeof bots.$inferSelect;

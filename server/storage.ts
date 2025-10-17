@@ -3,20 +3,34 @@ import {
   users,
   bots,
   environmentVariables,
+  accessTokens,
   type User,
   type UpsertUser,
   type Bot,
   type InsertBot,
   type EnvironmentVariable,
   type InsertEnvironmentVariable,
+  type AccessToken,
+  type InsertAccessToken,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
 
 export interface IStorage {
-  // User operations - Required for Replit Auth
+  // User operations
   getUser(id: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  createUser(user: Omit<UpsertUser, 'id'>): Promise<User>;
+  getAllUsers(): Promise<User[]>;
+  
+  // Access Token operations
+  getTokenByValue(token: string): Promise<AccessToken | undefined>;
+  getTokensByUserId(userId: string): Promise<AccessToken[]>;
+  getAllTokens(): Promise<AccessToken[]>;
+  createToken(token: InsertAccessToken): Promise<AccessToken>;
+  updateToken(id: number, updates: Partial<AccessToken>): Promise<AccessToken>;
+  deleteToken(id: number): Promise<void>;
   
   // Bot operations
   getBotById(id: number): Promise<Bot | undefined>;
@@ -38,6 +52,20 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users);
+  }
+
+  async createUser(userData: Omit<UpsertUser, 'id'>): Promise<User> {
+    const [user] = await db.insert(users).values(userData).returning();
+    return user;
+  }
+
   async upsertUser(userData: UpsertUser): Promise<User> {
     const [user] = await db
       .insert(users)
@@ -51,6 +79,38 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return user;
+  }
+
+  // Access Token operations
+  async getTokenByValue(token: string): Promise<AccessToken | undefined> {
+    const [accessToken] = await db.select().from(accessTokens).where(eq(accessTokens.token, token));
+    return accessToken;
+  }
+
+  async getTokensByUserId(userId: string): Promise<AccessToken[]> {
+    return await db.select().from(accessTokens).where(eq(accessTokens.userId, userId));
+  }
+
+  async getAllTokens(): Promise<AccessToken[]> {
+    return await db.select().from(accessTokens);
+  }
+
+  async createToken(tokenData: InsertAccessToken): Promise<AccessToken> {
+    const [token] = await db.insert(accessTokens).values(tokenData).returning();
+    return token;
+  }
+
+  async updateToken(id: number, updates: Partial<AccessToken>): Promise<AccessToken> {
+    const [token] = await db
+      .update(accessTokens)
+      .set(updates)
+      .where(eq(accessTokens.id, id))
+      .returning();
+    return token;
+  }
+
+  async deleteToken(id: number): Promise<void> {
+    await db.delete(accessTokens).where(eq(accessTokens.id, id));
   }
 
   // Bot operations
