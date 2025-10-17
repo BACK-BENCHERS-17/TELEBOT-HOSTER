@@ -1,0 +1,7 @@
+uploads/
+.pythonlibs/
+*.py
+requirements.txt
+pyproject.toml
+Pipfile
+poetry.lock
