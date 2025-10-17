@@ -162,4 +162,165 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-export const storage = new DatabaseStorage();
+// In-Memory Storage Implementation (no database required)
+export class MemStorage implements IStorage {
+  private users: User[] = [];
+  private bots: Bot[] = [];
+  private tokens: AccessToken[] = [];
+  private envVars: EnvironmentVariable[] = [];
+  private userIdCounter = 0;
+  private botIdCounter = 0;
+  private tokenIdCounter = 0;
+  private envVarIdCounter = 0;
+
+  // User operations
+  async getUser(id: string): Promise<User | undefined> {
+    return this.users.find(u => u.id === id);
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    return this.users.find(u => u.email === email);
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return [...this.users];
+  }
+
+  async createUser(userData: Omit<UpsertUser, 'id'>): Promise<User> {
+    const user: User = {
+      id: `user_${++this.userIdCounter}_${Date.now()}`,
+      email: userData.email || null,
+      firstName: userData.firstName || null,
+      lastName: userData.lastName || null,
+      profileImageUrl: userData.profileImageUrl || null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.users.push(user);
+    return user;
+  }
+
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    const existingIndex = this.users.findIndex(u => u.id === userData.id);
+    const user: User = {
+      ...userData,
+      email: userData.email || null,
+      firstName: userData.firstName || null,
+      lastName: userData.lastName || null,
+      profileImageUrl: userData.profileImageUrl || null,
+      createdAt: userData.createdAt || new Date(),
+      updatedAt: new Date(),
+    };
+    
+    if (existingIndex >= 0) {
+      this.users[existingIndex] = user;
+    } else {
+      this.users.push(user);
+    }
+    return user;
+  }
+
+  // Access Token operations
+  async getTokenByValue(token: string): Promise<AccessToken | undefined> {
+    return this.tokens.find(t => t.token === token);
+  }
+
+  async getTokensByUserId(userId: string): Promise<AccessToken[]> {
+    return this.tokens.filter(t => t.userId === userId);
+  }
+
+  async getAllTokens(): Promise<AccessToken[]> {
+    return [...this.tokens];
+  }
+
+  async createToken(tokenData: InsertAccessToken): Promise<AccessToken> {
+    const token: AccessToken = {
+      id: ++this.tokenIdCounter,
+      token: tokenData.token,
+      userId: tokenData.userId,
+      isActive: tokenData.isActive || 'true',
+      createdBy: tokenData.createdBy || 'admin',
+      createdAt: new Date(),
+      expiresAt: tokenData.expiresAt || null,
+    };
+    this.tokens.push(token);
+    return token;
+  }
+
+  async updateToken(id: number, updates: Partial<AccessToken>): Promise<AccessToken> {
+    const tokenIndex = this.tokens.findIndex(t => t.id === id);
+    if (tokenIndex === -1) throw new Error('Token not found');
+    
+    this.tokens[tokenIndex] = { ...this.tokens[tokenIndex], ...updates };
+    return this.tokens[tokenIndex];
+  }
+
+  async deleteToken(id: number): Promise<void> {
+    this.tokens = this.tokens.filter(t => t.id !== id);
+  }
+
+  // Bot operations
+  async getBotById(id: number): Promise<Bot | undefined> {
+    return this.bots.find(b => b.id === id);
+  }
+
+  async getBotsByUserId(userId: string): Promise<Bot[]> {
+    return this.bots.filter(b => b.userId === userId);
+  }
+
+  async createBot(botData: InsertBot): Promise<Bot> {
+    const bot: Bot = {
+      id: ++this.botIdCounter,
+      userId: botData.userId,
+      name: botData.name,
+      runtime: botData.runtime,
+      status: botData.status || 'stopped',
+      zipPath: botData.zipPath || null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.bots.push(bot);
+    return bot;
+  }
+
+  async updateBot(id: number, updates: Partial<Bot>): Promise<Bot> {
+    const botIndex = this.bots.findIndex(b => b.id === id);
+    if (botIndex === -1) throw new Error('Bot not found');
+    
+    this.bots[botIndex] = { 
+      ...this.bots[botIndex], 
+      ...updates,
+      updatedAt: new Date()
+    };
+    return this.bots[botIndex];
+  }
+
+  async deleteBot(id: number): Promise<void> {
+    this.bots = this.bots.filter(b => b.id !== id);
+  }
+
+  // Environment variable operations
+  async getEnvVarsByBotId(botId: number): Promise<EnvironmentVariable[]> {
+    return this.envVars.filter(e => e.botId === botId);
+  }
+
+  async createEnvVar(envVarData: InsertEnvironmentVariable): Promise<EnvironmentVariable> {
+    const envVar: EnvironmentVariable = {
+      id: ++this.envVarIdCounter,
+      botId: envVarData.botId,
+      key: envVarData.key,
+      value: envVarData.value,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.envVars.push(envVar);
+    return envVar;
+  }
+
+  async deleteEnvVar(id: number): Promise<void> {
+    this.envVars = this.envVars.filter(e => e.id !== id);
+  }
+}
+
+// Use in-memory storage to avoid database authentication issues
+export const storage = new MemStorage();
