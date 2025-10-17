@@ -26,8 +26,9 @@ const getOidcConfig = memoize(
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
   const pgStore = connectPg(session);
+  const DATABASE_URL = "postgresql://neondb_owner:npg_7jDR8VGkFzPT@ep-hidden-surf-a6q3cju3.us-west-2.aws.neon.tech/neondb?sslmode=require";
   const sessionStore = new pgStore({
-    conString: process.env.DATABASE_URL,
+    conString: DATABASE_URL,
     createTableIfMissing: false,
     ttl: sessionTtl,
     tableName: "sessions",
