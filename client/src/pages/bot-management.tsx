@@ -38,7 +38,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 export default function BotManagement() {
   const params = useParams();
   const botId = params.id;
-  const [, setLocation] = useNavigate();
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const logsEndRef = useRef<HTMLDivElement>(null);
   const [logs, setLogs] = useState<string[]>([]);
