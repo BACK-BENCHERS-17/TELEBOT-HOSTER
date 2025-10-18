@@ -203,7 +203,7 @@ export class MemStorage implements IStorage {
   async upsertUser(userData: UpsertUser): Promise<User> {
     const existingIndex = this.users.findIndex(u => u.id === userData.id);
     const user: User = {
-      ...userData,
+      id: userData.id || `user_${++this.userIdCounter}_${Date.now()}`,
       email: userData.email || null,
       firstName: userData.firstName || null,
       lastName: userData.lastName || null,
@@ -276,6 +276,11 @@ export class MemStorage implements IStorage {
       runtime: botData.runtime,
       status: botData.status || 'stopped',
       zipPath: botData.zipPath || null,
+      extractedPath: botData.extractedPath || null,
+      entryPoint: botData.entryPoint || null,
+      containerId: botData.containerId || null,
+      processId: botData.processId || null,
+      errorMessage: botData.errorMessage || null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };

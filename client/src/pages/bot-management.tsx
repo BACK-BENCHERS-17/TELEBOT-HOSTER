@@ -47,7 +47,7 @@ export default function BotManagement() {
   const [showValues, setShowValues] = useState<Record<number, boolean>>({});
 
   // Validate botId - ensure it's not null, undefined, or the string "null"
-  const isValidBotId = botId && botId !== 'null' && botId !== 'undefined';
+  const isValidBotId = Boolean(botId && botId !== 'null' && botId !== 'undefined');
 
   const { data: bot, isLoading } = useQuery<BotType>({
     queryKey: ['/api/bots', botId],
