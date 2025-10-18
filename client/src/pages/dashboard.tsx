@@ -173,8 +173,8 @@ export default function Dashboard() {
         ) : (
           // Bots Grid
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {bots.map((bot) => (
-              <Card key={bot.id} className="p-6 hover-elevate cursor-pointer transition-all" onClick={() => setLocation(`/bot/${bot.id}`)} data-testid={`card-bot-${bot.id}`}>
+            {bots.map((bot, index) => (
+              <Card key={bot.id || `bot-${index}`} className="p-6 hover-elevate cursor-pointer transition-all" onClick={() => setLocation(`/bot/${bot.id}`)} data-testid={`card-bot-${bot.id}`}>
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
