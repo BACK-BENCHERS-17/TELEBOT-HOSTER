@@ -12,12 +12,15 @@ services:
         value: 5000
       - key: MONGODB_URI
         sync: false
+        # Get this from MongoDB Atlas - format: mongodb+srv://user:pass@cluster.mongodb.net/database
       - key: SESSION_SECRET
         generateValue: true
       - key: ADMIN_USERNAME
-        value: admin
+        sync: false
+        # Set your admin username (default: admin)
       - key: ADMIN_PASSWORD
         sync: false
+        # IMPORTANT: Set a strong password for admin panel access
       - key: DEVELOPER_CONTACT
-        value: your-contact@example.com
+        value: t.me/your_username
     autoDeploy: true
