@@ -138,7 +138,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/admin/users', isAdmin, async (req: any, res) => {
     try {
-      const { email, firstName, lastName } = req.body;
+      const { email, firstName, lastName, tier, usageLimit, autoRestart } = req.body;
       
       const existingUser = await storage.getUserByEmail(email);
       if (existingUser) {
@@ -149,12 +149,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email,
         firstName,
         lastName,
+        tier: tier || 'FREE',
+        usageCount: 0,
+        usageLimit: tier === 'PREMIUM' ? 999999 : (usageLimit || 5),
+        autoRestart: autoRestart || (tier === 'PREMIUM' ? 'true' : 'false'),
       });
       
       res.json(user);
     } catch (error) {
       console.error("Error creating user:", error);
       res.status(500).json({ message: "Failed to create user" });
+    }
+  });
+
+  app.patch('/api/admin/users/:id', isAdmin, async (req: any, res) => {
+    try {
+      const userId = req.params.id;
+      const { tier, usageLimit, autoRestart, usageCount } = req.body;
+      
+      const updates: any = {};
+      if (tier !== undefined) updates.tier = tier;
+      if (usageLimit !== undefined) updates.usageLimit = usageLimit;
+      if (autoRestart !== undefined) updates.autoRestart = autoRestart;
+      if (usageCount !== undefined) updates.usageCount = usageCount;
+      
+      const updatedUser = await storage.updateUser(userId, updates);
+      res.json(updatedUser);
+    } catch (error) {
+      console.error("Error updating user:", error);
+      res.status(500).json({ message: "Failed to update user" });
     }
   });
 
@@ -167,7 +190,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
 
-      const token = nanoid(32);
+      const randomPart = nanoid(8).toUpperCase();
+      const token = `BACK-${randomPart}`;
       const accessToken = await storage.createToken({
         token,
         userId,
@@ -246,6 +270,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.id;
       const { name, runtime } = req.body;
       const envVars = req.body.envVars ? JSON.parse(req.body.envVars) : [];
+      
+      // Check user tier and usage limits
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      if (user.tier === 'FREE' && user.usageCount >= user.usageLimit) {
+        return res.status(403).json({ 
+          message: "Usage limit reached. Please upgrade to PREMIUM for unlimited usage.",
+          usageCount: user.usageCount,
+          usageLimit: user.usageLimit
+        });
+      }
       
       // Validate bot data with Zod schema
       const validatedBot = insertBotSchema.safeParse({
@@ -632,6 +670,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             await storage.createEnvVar(validatedEnvVar.data);
           }
         }
+      }
+      
+      // Increment usage count for FREE tier users
+      if (user.tier === 'FREE') {
+        await storage.incrementUsage(userId);
       }
       
       res.json(bot);
@@ -1433,13 +1476,33 @@ async function launchBot(botId: number) {
   
   botProcess.on('exit', async (code: number | null) => {
     botProcesses.delete(botId);
-    if (code !== 0 && code !== null) {
-      await storage.updateBot(botId, { 
-        status: 'error', 
-        errorMessage: `Process exited with code ${code}` 
-      });
-    } else {
-      await storage.updateBot(botId, { status: 'stopped' });
+    
+    // Get user to check auto-restart setting
+    const currentBot = await storage.getBotById(botId);
+    if (currentBot) {
+      const user = await storage.getUser(currentBot.userId);
+      
+      if (code !== 0 && code !== null) {
+        await storage.updateBot(botId, { 
+          status: 'error', 
+          errorMessage: `Process exited with code ${code}` 
+        });
+        
+        // Auto-restart for premium users with auto-restart enabled
+        if (user && user.autoRestart === 'true' && user.tier === 'PREMIUM') {
+          console.log(`[Bot ${botId}] Auto-restarting due to error (Premium user with auto-restart enabled)`);
+          setTimeout(async () => {
+            try {
+              await launchBot(botId);
+              console.log(`[Bot ${botId}] Successfully auto-restarted`);
+            } catch (error) {
+              console.error(`[Bot ${botId}] Auto-restart failed:`, error);
+            }
+          }, 3000);
+        }
+      } else {
+        await storage.updateBot(botId, { status: 'stopped' });
+      }
     }
   });
   
