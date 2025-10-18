@@ -533,10 +533,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 return;
               }
               
-              const installer = spawn(pythonPath, ['-m', 'pip', 'install', '-r', 'requirements.txt'], {
+              const installer = spawn(pythonPath, ['-m', 'pip', 'install', '--no-user', '-r', 'requirements.txt'], {
                 cwd: absoluteBotDir,
                 stdio: 'pipe',
-                env: { ...process.env }
+                env: { ...process.env, PIP_USER: '0' }
               });
               
               installer.stdout?.on('data', (data) => {
@@ -919,11 +919,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await promisify(fs.writeFile)(requirementsPath, requirements.trim() + '\n', 'utf-8');
         }
         
-        // Install the package
+        // Install the package using venv's python if it exists
         await new Promise<void>((resolve, reject) => {
-          const pip = spawn('pip', ['install', packageName], {
+          const venvPython = path.join(botDirectory, '.venv', 'bin', 'python');
+          const usePython = fs.existsSync(venvPython) ? venvPython : 'python3';
+          const args = fs.existsSync(venvPython) ? ['-m', 'pip', 'install', '--no-user', packageName] : ['install', packageName];
+          const command = fs.existsSync(venvPython) ? usePython : 'pip';
+          
+          const pip = spawn(command, args, {
             cwd: botDirectory,
-            stdio: 'pipe'
+            stdio: 'pipe',
+            env: { ...process.env, PIP_USER: '0' }
           });
           
           pip.on('close', (code) => {
