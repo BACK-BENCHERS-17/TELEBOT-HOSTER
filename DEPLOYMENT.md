@@ -1,0 +1,151 @@
+# TELEBOT HOSTER - Render Deployment Guide
+
+This guide will help you deploy TELEBOT HOSTER to Render.com.
+
+## Prerequisites
+
+1. A Render account (free tier available at [render.com](https://render.com))
+2. A MongoDB database (MongoDB Atlas free tier works great)
+3. Your code pushed to a Git repository (GitHub, GitLab, or Bitbucket)
+
+## Step 1: Set Up MongoDB Database
+
+1. Go to [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
+2. Create a free cluster
+3. Create a database user with read/write permissions
+4. Whitelist all IP addresses (0.0.0.0/0) for Render to connect
+5. Get your connection string (should look like: `mongodb+srv://username:password@cluster.mongodb.net/...`)
+
+## Step 2: Deploy to Render
+
+### Option A: Using render.yaml (Recommended)
+
+1. Push your code to a Git repository
+2. Go to [Render Dashboard](https://dashboard.render.com)
+3. Click "New +" → "Blueprint"
+4. Connect your repository
+5. Render will automatically detect the `render.yaml` file
+
+### Option B: Manual Setup
+
+1. Go to [Render Dashboard](https://dashboard.render.com)
+2. Click "New +" → "Web Service"
+3. Connect your Git repository
+4. Configure the service:
+   - **Name**: telebot-hoster (or your preferred name)
+   - **Runtime**: Node
+   - **Build Command**: `npm install && npm run build`
+   - **Start Command**: `npm start`
+   - **Plan**: Free (or select a paid plan for better performance)
+
+## Step 3: Configure Environment Variables
+
+In Render dashboard, go to your web service → Environment tab and add these variables:
+
+### Required Variables
+
+```
+NODE_ENV=production
+PORT=5000
+MONGODB_URI=your-mongodb-connection-string-here
+SESSION_SECRET=generate-a-random-32-character-string
+ADMIN_USERNAME=your-admin-username
+ADMIN_PASSWORD=your-secure-admin-password
+```
+
+### Optional Variables
+
+```
+DEVELOPER_CONTACT=t.me/your_telegram_username
+```
+
+**Important**: 
+- Generate a strong random string for `SESSION_SECRET` (you can use: `openssl rand -base64 32`)
+- Use a strong password for `ADMIN_PASSWORD`
+- Never commit these values to your repository
+
+## Step 4: Deploy
+
+1. Click "Create Web Service" or "Apply" if using Blueprint
+2. Render will automatically:
+   - Install dependencies
+   - Build your application
+   - Start the server
+3. Wait for deployment to complete (usually 2-5 minutes)
+
+## Step 5: Access Your Application
+
+Once deployed, your application will be available at:
+```
+https://your-service-name.onrender.com
+```
+
+### First-Time Setup
+
+1. Go to the admin panel: `https://your-service-name.onrender.com/admin`
+2. Log in with your `ADMIN_USERNAME` and `ADMIN_PASSWORD`
+3. Create access tokens for users
+4. Share tokens with users so they can log in and deploy bots
+
+## Troubleshooting
+
+### Build Fails
+
+- Check the build logs in Render dashboard
+- Ensure all dependencies are listed in `package.json`
+- Verify Node.js version compatibility
+
+### Application Crashes on Start
+
+- Check the logs in Render dashboard
+- Verify `MONGODB_URI` is correct and database is accessible
+- Ensure all required environment variables are set
+
+### Database Connection Issues
+
+- Verify MongoDB Atlas allows connections from all IPs (0.0.0.0/0)
+- Check that database user has correct permissions
+- Ensure connection string includes the database name
+
+### Session Issues
+
+- Make sure `SESSION_SECRET` is set
+- Verify `trust proxy` is enabled (it is by default in this app)
+
+## Performance Optimization
+
+For better performance on Render free tier:
+
+1. **Upgrade to a paid plan** for faster builds and no sleep mode
+2. **Use Redis for sessions** instead of in-memory storage
+3. **Enable caching** for static assets
+4. **Monitor resource usage** in Render dashboard
+
+## Auto-Deploy
+
+Render can automatically deploy when you push to your repository:
+
+1. Go to your web service settings
+2. Enable "Auto-Deploy"
+3. Choose the branch to auto-deploy from (usually `main` or `master`)
+
+## Support
+
+If you encounter issues:
+
+1. Check Render logs: Dashboard → Your Service → Logs
+2. Review MongoDB Atlas connection status
+3. Verify all environment variables are correctly set
+4. Check the application logs for specific error messages
+
+## Updating Your Application
+
+To update your deployed application:
+
+1. Push changes to your Git repository
+2. Render will automatically detect changes and redeploy
+3. Or manually trigger a deploy from Render dashboard
+
+---
+
+**Note**: The free tier on Render will spin down after 15 minutes of inactivity. The first request after spin-down may take 30-60 seconds to respond.
