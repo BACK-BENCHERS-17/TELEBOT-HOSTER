@@ -128,8 +128,17 @@ export class MongoStorage implements IStorage {
   // Access Token operations
   private mapTokenFromMongo(token: any): AccessToken {
     const { _id, __v, ...rest } = token;
+    // Convert MongoDB ObjectId to a numeric ID using a hash
+    const idStr = _id.toString();
+    let numericId = 0;
+    for (let i = 0; i < idStr.length; i++) {
+      numericId = ((numericId << 5) - numericId) + idStr.charCodeAt(i);
+      numericId = numericId & numericId;
+    }
+    numericId = Math.abs(numericId);
+    
     return {
-      id: Number(_id.toString().slice(-8), 16),
+      id: numericId,
       token: rest.token,
       userId: rest.userId,
       isActive: rest.isActive || 'true',
@@ -166,7 +175,10 @@ export class MongoStorage implements IStorage {
   async updateToken(id: number, updates: Partial<AccessToken>): Promise<AccessToken> {
     await this.connect();
     const tokens = await AccessTokenModel.find().lean<any>();
-    const tokenDoc = tokens.find((t: any) => Number(t._id.toString().slice(-8), 16) === id);
+    const tokenDoc = tokens.find((t: any) => {
+      const mapped = this.mapTokenFromMongo(t);
+      return mapped.id === id;
+    });
     if (!tokenDoc) throw new Error('Token not found');
     
     const token = await AccessTokenModel.findByIdAndUpdate(
@@ -181,7 +193,10 @@ export class MongoStorage implements IStorage {
   async deleteToken(id: number): Promise<void> {
     await this.connect();
     const tokens = await AccessTokenModel.find().lean<any>();
-    const tokenDoc = tokens.find((t: any) => Number(t._id.toString().slice(-8), 16) === id);
+    const tokenDoc = tokens.find((t: any) => {
+      const mapped = this.mapTokenFromMongo(t);
+      return mapped.id === id;
+    });
     if (tokenDoc) {
       await AccessTokenModel.findByIdAndDelete(tokenDoc._id);
     }
@@ -190,8 +205,17 @@ export class MongoStorage implements IStorage {
   // Bot operations
   private mapBotFromMongo(bot: any): Bot {
     const { _id, __v, ...rest } = bot;
+    // Convert MongoDB ObjectId to a numeric ID using a hash of the hex string
+    const idStr = _id.toString();
+    let numericId = 0;
+    for (let i = 0; i < idStr.length; i++) {
+      numericId = ((numericId << 5) - numericId) + idStr.charCodeAt(i);
+      numericId = numericId & numericId; // Convert to 32-bit integer
+    }
+    numericId = Math.abs(numericId);
+    
     return {
-      id: Number(_id.toString().slice(-8), 16),
+      id: numericId,
       userId: rest.userId,
       name: rest.name,
       runtime: rest.runtime,
@@ -210,7 +234,10 @@ export class MongoStorage implements IStorage {
   async getBotById(id: number): Promise<Bot | undefined> {
     await this.connect();
     const bots = await BotModel.find().lean<any>();
-    const bot = bots.find((b: any) => Number(b._id.toString().slice(-8), 16) === id);
+    const bot = bots.find((b: any) => {
+      const mapped = this.mapBotFromMongo(b);
+      return mapped.id === id;
+    });
     return bot ? this.mapBotFromMongo(bot) : undefined;
   }
 
@@ -229,7 +256,10 @@ export class MongoStorage implements IStorage {
   async updateBot(id: number, updates: Partial<Bot>): Promise<Bot> {
     await this.connect();
     const bots = await BotModel.find().lean<any>();
-    const botDoc = bots.find((b: any) => Number(b._id.toString().slice(-8), 16) === id);
+    const botDoc = bots.find((b: any) => {
+      const mapped = this.mapBotFromMongo(b);
+      return mapped.id === id;
+    });
     if (!botDoc) throw new Error('Bot not found');
     
     const bot = await BotModel.findByIdAndUpdate(
@@ -244,7 +274,10 @@ export class MongoStorage implements IStorage {
   async deleteBot(id: number): Promise<void> {
     await this.connect();
     const bots = await BotModel.find().lean<any>();
-    const botDoc = bots.find((b: any) => Number(b._id.toString().slice(-8), 16) === id);
+    const botDoc = bots.find((b: any) => {
+      const mapped = this.mapBotFromMongo(b);
+      return mapped.id === id;
+    });
     if (botDoc) {
       await BotModel.findByIdAndDelete(botDoc._id);
     }
@@ -253,8 +286,17 @@ export class MongoStorage implements IStorage {
   // Environment variable operations
   private mapEnvVarFromMongo(envVar: any): EnvironmentVariable {
     const { _id, __v, ...rest } = envVar;
+    // Convert MongoDB ObjectId to a numeric ID using a hash
+    const idStr = _id.toString();
+    let numericId = 0;
+    for (let i = 0; i < idStr.length; i++) {
+      numericId = ((numericId << 5) - numericId) + idStr.charCodeAt(i);
+      numericId = numericId & numericId;
+    }
+    numericId = Math.abs(numericId);
+    
     return {
-      id: Number(_id.toString().slice(-8), 16),
+      id: numericId,
       botId: rest.botId,
       key: rest.key,
       value: rest.value,
@@ -278,7 +320,10 @@ export class MongoStorage implements IStorage {
   async deleteEnvVar(id: number): Promise<void> {
     await this.connect();
     const envVars = await EnvironmentVariableModel.find().lean<any>();
-    const envVarDoc = envVars.find((e: any) => Number(e._id.toString().slice(-8), 16) === id);
+    const envVarDoc = envVars.find((e: any) => {
+      const mapped = this.mapEnvVarFromMongo(e);
+      return mapped.id === id;
+    });
     if (envVarDoc) {
       await EnvironmentVariableModel.findByIdAndDelete(envVarDoc._id);
     }
