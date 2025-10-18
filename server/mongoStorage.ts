@@ -17,6 +17,10 @@ const UserSchema = new mongoose.Schema({
   firstName: String,
   lastName: String,
   profileImageUrl: String,
+  tier: { type: String, default: 'FREE' },
+  usageCount: { type: Number, default: 0 },
+  usageLimit: { type: Number, default: 5 },
+  autoRestart: { type: String, default: 'false' },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });
@@ -149,6 +153,10 @@ export class MongoStorage implements IStorage {
       firstName: rest.firstName || null,
       lastName: rest.lastName || null,
       profileImageUrl: rest.profileImageUrl || null,
+      tier: rest.tier || 'FREE',
+      usageCount: rest.usageCount || 0,
+      usageLimit: rest.usageLimit || 5,
+      autoRestart: rest.autoRestart || 'false',
       createdAt: rest.createdAt || null,
       updatedAt: rest.updatedAt || null,
     };
@@ -187,6 +195,29 @@ export class MongoStorage implements IStorage {
       { upsert: true, new: true }
     ).lean<any>();
     return this.mapUserFromMongo(user!);
+  }
+
+  async updateUser(id: string, updates: Partial<User>): Promise<User> {
+    await this.connect();
+    const { id: _, ...updateData } = updates;
+    const user = await UserModel.findByIdAndUpdate(
+      id,
+      { ...updateData, updatedAt: new Date() },
+      { new: true }
+    ).lean<any>();
+    if (!user) throw new Error('User not found');
+    return this.mapUserFromMongo(user);
+  }
+
+  async incrementUsage(userId: string): Promise<User> {
+    await this.connect();
+    const user = await UserModel.findByIdAndUpdate(
+      userId,
+      { $inc: { usageCount: 1 }, updatedAt: new Date() },
+      { new: true }
+    ).lean<any>();
+    if (!user) throw new Error('User not found');
+    return this.mapUserFromMongo(user);
   }
 
   // Access Token operations

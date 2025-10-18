@@ -23,6 +23,8 @@ export interface IStorage {
   upsertUser(user: UpsertUser): Promise<User>;
   createUser(user: Omit<UpsertUser, 'id'>): Promise<User>;
   getAllUsers(): Promise<User[]>;
+  updateUser(id: string, updates: Partial<User>): Promise<User>;
+  incrementUsage(userId: string): Promise<User>;
   
   // Access Token operations
   getTokenByValue(token: string): Promise<AccessToken | undefined>;
@@ -77,6 +79,27 @@ export class DatabaseStorage implements IStorage {
           updatedAt: new Date(),
         },
       })
+      .returning();
+    return user;
+  }
+
+  async updateUser(id: string, updates: Partial<User>): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+    return user;
+  }
+
+  async incrementUsage(userId: string): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({
+        usageCount: sql`${users.usageCount} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
       .returning();
     return user;
   }
@@ -193,6 +216,10 @@ export class MemStorage implements IStorage {
       firstName: userData.firstName || null,
       lastName: userData.lastName || null,
       profileImageUrl: userData.profileImageUrl || null,
+      tier: userData.tier || 'FREE',
+      usageCount: userData.usageCount || 0,
+      usageLimit: userData.usageLimit || 5,
+      autoRestart: userData.autoRestart || 'false',
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -208,6 +235,10 @@ export class MemStorage implements IStorage {
       firstName: userData.firstName || null,
       lastName: userData.lastName || null,
       profileImageUrl: userData.profileImageUrl || null,
+      tier: userData.tier || 'FREE',
+      usageCount: userData.usageCount || 0,
+      usageLimit: userData.usageLimit || 5,
+      autoRestart: userData.autoRestart || 'false',
       createdAt: userData.createdAt || new Date(),
       updatedAt: new Date(),
     };
@@ -218,6 +249,30 @@ export class MemStorage implements IStorage {
       this.users.push(user);
     }
     return user;
+  }
+
+  async updateUser(id: string, updates: Partial<User>): Promise<User> {
+    const userIndex = this.users.findIndex(u => u.id === id);
+    if (userIndex === -1) throw new Error('User not found');
+    
+    this.users[userIndex] = { 
+      ...this.users[userIndex], 
+      ...updates,
+      updatedAt: new Date()
+    };
+    return this.users[userIndex];
+  }
+
+  async incrementUsage(userId: string): Promise<User> {
+    const userIndex = this.users.findIndex(u => u.id === userId);
+    if (userIndex === -1) throw new Error('User not found');
+    
+    this.users[userIndex] = {
+      ...this.users[userIndex],
+      usageCount: this.users[userIndex].usageCount + 1,
+      updatedAt: new Date()
+    };
+    return this.users[userIndex];
   }
 
   // Access Token operations
