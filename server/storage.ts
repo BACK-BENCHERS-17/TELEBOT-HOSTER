@@ -14,7 +14,7 @@ import {
   type InsertAccessToken,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 
 export interface IStorage {
   // User operations
@@ -328,6 +328,7 @@ export class MemStorage implements IStorage {
       id: ++this.botIdCounter,
       userId: botData.userId,
       name: botData.name,
+      description: botData.description || null,
       runtime: botData.runtime,
       status: botData.status || 'stopped',
       zipPath: botData.zipPath || null,

@@ -8,7 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Shield, Users, Key, Copy, Trash2, Plus, LogOut } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Shield, Users, Key, Copy, Trash2, Plus, LogOut, Edit } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useLocation } from "wouter";
 
@@ -22,6 +24,15 @@ export default function AdminPanel() {
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserFirstName, setNewUserFirstName] = useState("");
   const [newUserLastName, setNewUserLastName] = useState("");
+  const [newUserTier, setNewUserTier] = useState("FREE");
+  const [newUserUsageLimit, setNewUserUsageLimit] = useState("5");
+  const [newUserAutoRestart, setNewUserAutoRestart] = useState(false);
+  
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editTier, setEditTier] = useState("");
+  const [editUsageLimit, setEditUsageLimit] = useState("");
+  const [editAutoRestart, setEditAutoRestart] = useState(false);
+  const [editUsageCount, setEditUsageCount] = useState("");
 
   const { data: adminCheck } = useQuery({
     queryKey: ["/api/auth/admin-check"],
@@ -64,7 +75,14 @@ export default function AdminPanel() {
   });
 
   const createUserMutation = useMutation({
-    mutationFn: async (userData: { email: string; firstName: string; lastName: string }) => {
+    mutationFn: async (userData: { 
+      email: string; 
+      firstName: string; 
+      lastName: string; 
+      tier: string;
+      usageLimit: number;
+      autoRestart: string;
+    }) => {
       const res = await apiRequest("POST", "/api/admin/users", userData);
       return res.json();
     },
@@ -74,10 +92,31 @@ export default function AdminPanel() {
       setNewUserEmail("");
       setNewUserFirstName("");
       setNewUserLastName("");
+      setNewUserTier("FREE");
+      setNewUserUsageLimit("5");
+      setNewUserAutoRestart(false);
     },
     onError: (error: any) => {
       toast({ 
         title: error.message || "Failed to create user", 
+        variant: "destructive" 
+      });
+    },
+  });
+
+  const updateUserMutation = useMutation({
+    mutationFn: async ({ userId, updates }: { userId: string; updates: any }) => {
+      const res = await apiRequest("PATCH", `/api/admin/users/${userId}`, updates);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "User updated successfully" });
+      refetchUsers();
+      setEditingUserId(null);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: error.message || "Failed to update user", 
         variant: "destructive" 
       });
     },
@@ -123,10 +162,35 @@ export default function AdminPanel() {
 
   const handleCreateUser = (e: React.FormEvent) => {
     e.preventDefault();
+    const usageLimit = newUserTier === 'PREMIUM' ? 999999 : parseInt(newUserUsageLimit);
     createUserMutation.mutate({
       email: newUserEmail,
       firstName: newUserFirstName,
       lastName: newUserLastName,
+      tier: newUserTier,
+      usageLimit,
+      autoRestart: newUserTier === 'PREMIUM' && newUserAutoRestart ? 'true' : 'false',
+    });
+  };
+
+  const startEditUser = (user: any) => {
+    setEditingUserId(user.id);
+    setEditTier(user.tier);
+    setEditUsageLimit(user.usageLimit.toString());
+    setEditAutoRestart(user.autoRestart === 'true');
+    setEditUsageCount(user.usageCount.toString());
+  };
+
+  const handleUpdateUser = () => {
+    if (!editingUserId) return;
+    updateUserMutation.mutate({
+      userId: editingUserId,
+      updates: {
+        tier: editTier,
+        usageLimit: parseInt(editUsageLimit),
+        autoRestart: editAutoRestart ? 'true' : 'false',
+        usageCount: parseInt(editUsageCount),
+      },
     });
   };
 
@@ -260,6 +324,47 @@ export default function AdminPanel() {
                       data-testid="input-user-email"
                     />
                   </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="tier">User Tier</Label>
+                      <Select value={newUserTier} onValueChange={setNewUserTier}>
+                        <SelectTrigger data-testid="select-user-tier">
+                          <SelectValue placeholder="Select tier" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="FREE">FREE</SelectItem>
+                          <SelectItem value="PREMIUM">PREMIUM</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {newUserTier === 'FREE' && (
+                      <div className="space-y-2">
+                        <Label htmlFor="usageLimit">Usage Limit</Label>
+                        <Input
+                          id="usageLimit"
+                          type="number"
+                          value={newUserUsageLimit}
+                          onChange={(e) => setNewUserUsageLimit(e.target.value)}
+                          placeholder="5"
+                          min="1"
+                          data-testid="input-usage-limit"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  {newUserTier === 'PREMIUM' && (
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="autoRestart"
+                        checked={newUserAutoRestart}
+                        onCheckedChange={setNewUserAutoRestart}
+                        data-testid="switch-auto-restart"
+                      />
+                      <Label htmlFor="autoRestart" className="cursor-pointer">
+                        Enable Auto-Restart Service
+                      </Label>
+                    </div>
+                  )}
                   <Button 
                     type="submit" 
                     disabled={createUserMutation.isPending}
@@ -281,26 +386,119 @@ export default function AdminPanel() {
                   {users?.map((user: any) => (
                     <div
                       key={user.id}
-                      className="flex items-center justify-between p-4 rounded-lg border"
+                      className="p-4 rounded-lg border space-y-3"
                       data-testid={`user-${user.id}`}
                     >
-                      <div>
-                        <p className="font-medium" data-testid={`user-name-${user.id}`}>
-                          {user.firstName} {user.lastName}
-                        </p>
-                        <p className="text-sm text-muted-foreground" data-testid={`user-email-${user.id}`}>
-                          {user.email}
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        onClick={() => createTokenMutation.mutate(user.id)}
-                        disabled={createTokenMutation.isPending}
-                        data-testid={`button-create-token-${user.id}`}
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Create Token
-                      </Button>
+                      {editingUserId === user.id ? (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label>Tier</Label>
+                              <Select value={editTier} onValueChange={setEditTier}>
+                                <SelectTrigger data-testid={`select-edit-tier-${user.id}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="FREE">FREE</SelectItem>
+                                  <SelectItem value="PREMIUM">PREMIUM</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label>Usage Limit</Label>
+                              <Input
+                                type="number"
+                                value={editUsageLimit}
+                                onChange={(e) => setEditUsageLimit(e.target.value)}
+                                data-testid={`input-edit-usage-limit-${user.id}`}
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Usage Count (Current)</Label>
+                            <Input
+                              type="number"
+                              value={editUsageCount}
+                              onChange={(e) => setEditUsageCount(e.target.value)}
+                              data-testid={`input-edit-usage-count-${user.id}`}
+                            />
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Switch
+                              checked={editAutoRestart}
+                              onCheckedChange={setEditAutoRestart}
+                              data-testid={`switch-edit-auto-restart-${user.id}`}
+                            />
+                            <Label>Auto-Restart Service</Label>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={handleUpdateUser}
+                              disabled={updateUserMutation.isPending}
+                              data-testid={`button-save-user-${user.id}`}
+                            >
+                              Save Changes
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setEditingUserId(null)}
+                              data-testid={`button-cancel-edit-${user.id}`}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium" data-testid={`user-name-${user.id}`}>
+                                  {user.firstName} {user.lastName}
+                                </p>
+                                <Badge 
+                                  variant={user.tier === 'PREMIUM' ? 'default' : 'secondary'}
+                                  data-testid={`user-tier-${user.id}`}
+                                >
+                                  {user.tier}
+                                </Badge>
+                                {user.autoRestart === 'true' && (
+                                  <Badge variant="outline" data-testid={`user-auto-restart-${user.id}`}>
+                                    Auto-Restart
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-sm text-muted-foreground mt-1" data-testid={`user-email-${user.id}`}>
+                                {user.email}
+                              </p>
+                              <p className="text-sm text-muted-foreground mt-1" data-testid={`user-usage-${user.id}`}>
+                                Usage: {user.usageCount} / {user.tier === 'PREMIUM' ? 'Unlimited' : user.usageLimit}
+                              </p>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => startEditUser(user)}
+                                data-testid={`button-edit-user-${user.id}`}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => createTokenMutation.mutate(user.id)}
+                                disabled={createTokenMutation.isPending}
+                                data-testid={`button-create-token-${user.id}`}
+                              >
+                                <Plus className="h-4 w-4 mr-2" />
+                                Create Token
+                              </Button>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>

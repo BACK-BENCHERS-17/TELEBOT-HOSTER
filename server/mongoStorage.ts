@@ -283,6 +283,7 @@ export class MongoStorage implements IStorage {
       id: rest.numericId,
       userId: rest.userId,
       name: rest.name,
+      description: rest.description || null,
       runtime: rest.runtime,
       status: rest.status || 'stopped',
       zipPath: rest.zipPath || null,
