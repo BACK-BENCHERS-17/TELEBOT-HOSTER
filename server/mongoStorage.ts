@@ -77,28 +77,41 @@ export class MongoStorage implements IStorage {
   }
 
   // User operations
+  private mapUserFromMongo(user: any): User {
+    const { _id, __v, ...rest } = user;
+    return {
+      id: _id.toString(),
+      email: rest.email || null,
+      firstName: rest.firstName || null,
+      lastName: rest.lastName || null,
+      profileImageUrl: rest.profileImageUrl || null,
+      createdAt: rest.createdAt || null,
+      updatedAt: rest.updatedAt || null,
+    };
+  }
+
   async getUser(id: string): Promise<User | undefined> {
     await this.connect();
     const user = await UserModel.findById(id).lean<any>();
-    return user ? { ...user, id: user._id.toString() } as User : undefined;
+    return user ? this.mapUserFromMongo(user) : undefined;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
     await this.connect();
     const user = await UserModel.findOne({ email }).lean<any>();
-    return user ? { ...user, id: user._id.toString() } as User : undefined;
+    return user ? this.mapUserFromMongo(user) : undefined;
   }
 
   async getAllUsers(): Promise<User[]> {
     await this.connect();
     const users = await UserModel.find().lean<any>();
-    return users.map((u: any) => ({ ...u, id: u._id.toString() } as User));
+    return users.map((u: any) => this.mapUserFromMongo(u));
   }
 
   async createUser(userData: Omit<UpsertUser, 'id'>): Promise<User> {
     await this.connect();
     const user = await UserModel.create(userData);
-    return { ...user.toObject(), id: user._id.toString() } as User;
+    return this.mapUserFromMongo(user.toObject());
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
@@ -109,32 +122,45 @@ export class MongoStorage implements IStorage {
       { ...rest, updatedAt: new Date() },
       { upsert: true, new: true }
     ).lean<any>();
-    return { ...user, id: user!._id.toString() } as User;
+    return this.mapUserFromMongo(user!);
   }
 
   // Access Token operations
+  private mapTokenFromMongo(token: any): AccessToken {
+    const { _id, __v, ...rest } = token;
+    return {
+      id: Number(_id.toString().slice(-8), 16),
+      token: rest.token,
+      userId: rest.userId,
+      isActive: rest.isActive || 'true',
+      createdBy: rest.createdBy || 'admin',
+      createdAt: rest.createdAt || null,
+      expiresAt: rest.expiresAt || null,
+    };
+  }
+
   async getTokenByValue(token: string): Promise<AccessToken | undefined> {
     await this.connect();
     const accessToken = await AccessTokenModel.findOne({ token }).lean<any>();
-    return accessToken ? { ...accessToken, id: Number(accessToken._id.toString().slice(-8), 16) } as AccessToken : undefined;
+    return accessToken ? this.mapTokenFromMongo(accessToken) : undefined;
   }
 
   async getTokensByUserId(userId: string): Promise<AccessToken[]> {
     await this.connect();
     const tokens = await AccessTokenModel.find({ userId }).lean<any>();
-    return tokens.map((t: any) => ({ ...t, id: Number(t._id.toString().slice(-8), 16) } as AccessToken));
+    return tokens.map((t: any) => this.mapTokenFromMongo(t));
   }
 
   async getAllTokens(): Promise<AccessToken[]> {
     await this.connect();
     const tokens = await AccessTokenModel.find().lean<any>();
-    return tokens.map((t: any) => ({ ...t, id: Number(t._id.toString().slice(-8), 16) } as AccessToken));
+    return tokens.map((t: any) => this.mapTokenFromMongo(t));
   }
 
   async createToken(tokenData: InsertAccessToken): Promise<AccessToken> {
     await this.connect();
     const token = await AccessTokenModel.create(tokenData);
-    return { ...token.toObject(), id: Number(token._id.toString().slice(-8), 16) } as AccessToken;
+    return this.mapTokenFromMongo(token.toObject());
   }
 
   async updateToken(id: number, updates: Partial<AccessToken>): Promise<AccessToken> {
@@ -149,7 +175,7 @@ export class MongoStorage implements IStorage {
       { new: true }
     ).lean<any>();
     if (!token) throw new Error('Token not found');
-    return { ...token, id: Number(token._id.toString().slice(-8), 16) } as AccessToken;
+    return this.mapTokenFromMongo(token);
   }
 
   async deleteToken(id: number): Promise<void> {
@@ -162,56 +188,42 @@ export class MongoStorage implements IStorage {
   }
 
   // Bot operations
+  private mapBotFromMongo(bot: any): Bot {
+    const { _id, __v, ...rest } = bot;
+    return {
+      id: Number(_id.toString().slice(-8), 16),
+      userId: rest.userId,
+      name: rest.name,
+      runtime: rest.runtime,
+      status: rest.status || 'stopped',
+      zipPath: rest.zipPath || null,
+      extractedPath: rest.extractedPath || null,
+      entryPoint: rest.entryPoint || null,
+      containerId: rest.containerId || null,
+      processId: rest.processId || null,
+      errorMessage: rest.errorMessage || null,
+      createdAt: rest.createdAt || null,
+      updatedAt: rest.updatedAt || null,
+    };
+  }
+
   async getBotById(id: number): Promise<Bot | undefined> {
     await this.connect();
     const bots = await BotModel.find().lean<any>();
     const bot = bots.find((b: any) => Number(b._id.toString().slice(-8), 16) === id);
-    return bot ? { 
-      ...bot, 
-      id: Number(bot._id.toString().slice(-8), 16),
-      zipPath: bot.zipPath || null,
-      extractedPath: bot.extractedPath || null,
-      entryPoint: bot.entryPoint || null,
-      containerId: bot.containerId || null,
-      processId: bot.processId || null,
-      errorMessage: bot.errorMessage || null,
-      createdAt: bot.createdAt || null,
-      updatedAt: bot.updatedAt || null,
-    } as Bot : undefined;
+    return bot ? this.mapBotFromMongo(bot) : undefined;
   }
 
   async getBotsByUserId(userId: string): Promise<Bot[]> {
     await this.connect();
     const bots = await BotModel.find({ userId }).lean<any>();
-    return bots.map((b: any) => ({ 
-      ...b, 
-      id: Number(b._id.toString().slice(-8), 16),
-      zipPath: b.zipPath || null,
-      extractedPath: b.extractedPath || null,
-      entryPoint: b.entryPoint || null,
-      containerId: b.containerId || null,
-      processId: b.processId || null,
-      errorMessage: b.errorMessage || null,
-      createdAt: b.createdAt || null,
-      updatedAt: b.updatedAt || null,
-    } as Bot));
+    return bots.map((b: any) => this.mapBotFromMongo(b));
   }
 
   async createBot(botData: InsertBot): Promise<Bot> {
     await this.connect();
     const bot = await BotModel.create(botData);
-    return { 
-      ...bot.toObject(), 
-      id: Number(bot._id.toString().slice(-8), 16),
-      zipPath: bot.zipPath || null,
-      extractedPath: bot.extractedPath || null,
-      entryPoint: bot.entryPoint || null,
-      containerId: bot.containerId || null,
-      processId: bot.processId || null,
-      errorMessage: bot.errorMessage || null,
-      createdAt: bot.createdAt || null,
-      updatedAt: bot.updatedAt || null,
-    } as Bot;
+    return this.mapBotFromMongo(bot.toObject());
   }
 
   async updateBot(id: number, updates: Partial<Bot>): Promise<Bot> {
@@ -226,18 +238,7 @@ export class MongoStorage implements IStorage {
       { new: true }
     ).lean<any>();
     if (!bot) throw new Error('Bot not found');
-    return { 
-      ...bot, 
-      id: Number(bot._id.toString().slice(-8), 16),
-      zipPath: bot.zipPath || null,
-      extractedPath: bot.extractedPath || null,
-      entryPoint: bot.entryPoint || null,
-      containerId: bot.containerId || null,
-      processId: bot.processId || null,
-      errorMessage: bot.errorMessage || null,
-      createdAt: bot.createdAt || null,
-      updatedAt: bot.updatedAt || null,
-    } as Bot;
+    return this.mapBotFromMongo(bot);
   }
 
   async deleteBot(id: number): Promise<void> {
@@ -250,16 +251,28 @@ export class MongoStorage implements IStorage {
   }
 
   // Environment variable operations
+  private mapEnvVarFromMongo(envVar: any): EnvironmentVariable {
+    const { _id, __v, ...rest } = envVar;
+    return {
+      id: Number(_id.toString().slice(-8), 16),
+      botId: rest.botId,
+      key: rest.key,
+      value: rest.value,
+      createdAt: rest.createdAt || null,
+      updatedAt: rest.updatedAt || null,
+    };
+  }
+
   async getEnvVarsByBotId(botId: number): Promise<EnvironmentVariable[]> {
     await this.connect();
     const envVars = await EnvironmentVariableModel.find({ botId }).lean<any>();
-    return envVars.map((e: any) => ({ ...e, id: Number(e._id.toString().slice(-8), 16) } as EnvironmentVariable));
+    return envVars.map((e: any) => this.mapEnvVarFromMongo(e));
   }
 
   async createEnvVar(envVarData: InsertEnvironmentVariable): Promise<EnvironmentVariable> {
     await this.connect();
     const envVar = await EnvironmentVariableModel.create(envVarData);
-    return { ...envVar.toObject(), id: Number(envVar._id.toString().slice(-8), 16) } as EnvironmentVariable;
+    return this.mapEnvVarFromMongo(envVar.toObject());
   }
 
   async deleteEnvVar(id: number): Promise<void> {
