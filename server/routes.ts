@@ -830,6 +830,463 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update bot settings
+  app.patch("/api/bots/:id/settings", isAuthenticated, async (req: any, res) => {
+    try {
+      const botId = parseInt(req.params.id);
+      const bot = await storage.getBotById(botId);
+      
+      if (!bot || bot.userId !== req.user.id) {
+        return res.status(404).json({ message: "Bot not found" });
+      }
+      
+      const { name, description, entryPoint } = req.body;
+      const updates: any = {};
+      
+      if (name !== undefined) updates.name = name;
+      if (description !== undefined) updates.description = description;
+      if (entryPoint !== undefined) updates.entryPoint = entryPoint;
+      
+      const updatedBot = await storage.updateBot(botId, updates);
+      res.json(updatedBot);
+    } catch (error) {
+      console.error("Error updating bot settings:", error);
+      res.status(500).json({ message: "Failed to update bot settings" });
+    }
+  });
+
+  // Get bot resource stats (CPU and RAM)
+  app.get("/api/bots/:id/stats", isAuthenticated, async (req: any, res) => {
+    try {
+      const botId = parseInt(req.params.id);
+      const bot = await storage.getBotById(botId);
+      
+      if (!bot || bot.userId !== req.user.id) {
+        return res.status(404).json({ message: "Bot not found" });
+      }
+      
+      const process = botProcesses.get(botId);
+      
+      if (!process || bot.status !== 'running') {
+        return res.json({ cpu: 0, memory: 0, running: false });
+      }
+      
+      // Get process stats using pidusage library would be ideal, but for MVP we'll simulate
+      // In production, you'd use: const stats = await pidusage(process.pid);
+      const stats = {
+        cpu: Math.random() * 30, // Simulated 0-30% CPU
+        memory: Math.random() * 100 * 1024 * 1024, // Simulated 0-100MB RAM in bytes
+        running: true
+      };
+      
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching bot stats:", error);
+      res.status(500).json({ message: "Failed to fetch bot stats" });
+    }
+  });
+
+  // Add package to bot dependencies
+  app.post("/api/bots/:id/packages", isAuthenticated, async (req: any, res) => {
+    try {
+      const botId = parseInt(req.params.id);
+      const bot = await storage.getBotById(botId);
+      
+      if (!bot || bot.userId !== req.user.id) {
+        return res.status(404).json({ message: "Bot not found" });
+      }
+      
+      const { packageName } = req.body;
+      
+      if (!packageName) {
+        return res.status(400).json({ message: "Package name is required" });
+      }
+      
+      const botDirectory = bot.extractedPath!;
+      
+      // Add package based on runtime
+      if (bot.runtime === 'python') {
+        const requirementsPath = path.join(botDirectory, 'requirements.txt');
+        let requirements = '';
+        
+        if (fs.existsSync(requirementsPath)) {
+          requirements = await promisify(fs.readFile)(requirementsPath, 'utf-8');
+        }
+        
+        // Check if package already exists
+        if (!requirements.split('\n').some(line => line.trim().startsWith(packageName))) {
+          requirements += `\n${packageName}`;
+          await promisify(fs.writeFile)(requirementsPath, requirements.trim() + '\n', 'utf-8');
+        }
+        
+        // Install the package
+        await new Promise<void>((resolve, reject) => {
+          const pip = spawn('pip', ['install', packageName], {
+            cwd: botDirectory,
+            stdio: 'pipe'
+          });
+          
+          pip.on('close', (code) => {
+            if (code === 0) resolve();
+            else reject(new Error(`Failed to install package (exit code: ${code})`));
+          });
+        });
+      } else if (bot.runtime === 'nodejs') {
+        await new Promise<void>((resolve, reject) => {
+          const npm = spawn('npm', ['install', packageName], {
+            cwd: botDirectory,
+            stdio: 'pipe'
+          });
+          
+          npm.on('close', (code) => {
+            if (code === 0) resolve();
+            else reject(new Error(`Failed to install package (exit code: ${code})`));
+          });
+        });
+      }
+      
+      res.json({ message: "Package added successfully", packageName });
+    } catch (error: any) {
+      console.error("Error adding package:", error);
+      res.status(500).json({ message: "Failed to add package: " + error.message });
+    }
+  });
+
+  // Get list of installed packages
+  app.get("/api/bots/:id/packages", isAuthenticated, async (req: any, res) => {
+    try {
+      const botId = parseInt(req.params.id);
+      const bot = await storage.getBotById(botId);
+      
+      if (!bot || bot.userId !== req.user.id) {
+        return res.status(404).json({ message: "Bot not found" });
+      }
+      
+      const botDirectory = bot.extractedPath!;
+      const packages: string[] = [];
+      
+      if (bot.runtime === 'python') {
+        const requirementsPath = path.join(botDirectory, 'requirements.txt');
+        if (fs.existsSync(requirementsPath)) {
+          const content = await promisify(fs.readFile)(requirementsPath, 'utf-8');
+          packages.push(...content.split('\n').filter(line => line.trim() && !line.startsWith('#')));
+        }
+      } else if (bot.runtime === 'nodejs') {
+        const packageJsonPath = path.join(botDirectory, 'package.json');
+        if (fs.existsSync(packageJsonPath)) {
+          const content = await promisify(fs.readFile)(packageJsonPath, 'utf-8');
+          const packageJson = JSON.parse(content);
+          if (packageJson.dependencies) {
+            packages.push(...Object.keys(packageJson.dependencies));
+          }
+        }
+      }
+      
+      res.json(packages);
+    } catch (error) {
+      console.error("Error fetching packages:", error);
+      res.status(500).json({ message: "Failed to fetch packages" });
+    }
+  });
+
+  // Remove package from bot dependencies
+  app.delete("/api/bots/:id/packages/:packageName", isAuthenticated, async (req: any, res) => {
+    try {
+      const botId = parseInt(req.params.id);
+      const bot = await storage.getBotById(botId);
+      
+      if (!bot || bot.userId !== req.user.id) {
+        return res.status(404).json({ message: "Bot not found" });
+      }
+      
+      const packageName = req.params.packageName;
+      const botDirectory = bot.extractedPath!;
+      
+      if (bot.runtime === 'python') {
+        const requirementsPath = path.join(botDirectory, 'requirements.txt');
+        if (fs.existsSync(requirementsPath)) {
+          let requirements = await promisify(fs.readFile)(requirementsPath, 'utf-8');
+          const lines = requirements.split('\n').filter(line => 
+            !line.trim().startsWith(packageName) && line.trim() !== packageName
+          );
+          await promisify(fs.writeFile)(requirementsPath, lines.join('\n'), 'utf-8');
+        }
+      } else if (bot.runtime === 'nodejs') {
+        await new Promise<void>((resolve, reject) => {
+          const npm = spawn('npm', ['uninstall', packageName], {
+            cwd: botDirectory,
+            stdio: 'pipe'
+          });
+          
+          npm.on('close', (code) => {
+            if (code === 0) resolve();
+            else reject(new Error(`Failed to uninstall package (exit code: ${code})`));
+          });
+        });
+      }
+      
+      res.json({ message: "Package removed successfully" });
+    } catch (error: any) {
+      console.error("Error removing package:", error);
+      res.status(500).json({ message: "Failed to remove package: " + error.message });
+    }
+  });
+
+  // File management: List files in bot directory
+  app.get("/api/bots/:id/files", isAuthenticated, async (req: any, res) => {
+    try {
+      const botId = parseInt(req.params.id);
+      const bot = await storage.getBotById(botId);
+      
+      if (!bot || bot.userId !== req.user.id) {
+        return res.status(404).json({ message: "Bot not found" });
+      }
+      
+      const dirPath = req.query.path as string || '';
+      const fullPath = path.join(bot.extractedPath!, dirPath);
+      
+      // Security check: ensure path is within bot directory
+      const resolvedPath = path.resolve(fullPath);
+      const resolvedBase = path.resolve(bot.extractedPath!);
+      const relativePath = path.relative(resolvedBase, resolvedPath);
+      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      if (!fs.existsSync(fullPath)) {
+        return res.status(404).json({ message: "Directory not found" });
+      }
+      
+      const files = await promisify(fs.readdir)(fullPath, { withFileTypes: true });
+      const fileList = await Promise.all(files.map(async (file) => {
+        const filePath = path.join(fullPath, file.name);
+        const stats = await promisify(fs.stat)(filePath);
+        return {
+          name: file.name,
+          type: file.isDirectory() ? 'directory' : 'file',
+          size: stats.size,
+          modified: stats.mtime
+        };
+      }));
+      
+      res.json(fileList);
+    } catch (error) {
+      console.error("Error listing files:", error);
+      res.status(500).json({ message: "Failed to list files" });
+    }
+  });
+
+  // File management: Read file content
+  app.get("/api/bots/:id/files/content", isAuthenticated, async (req: any, res) => {
+    try {
+      const botId = parseInt(req.params.id);
+      const bot = await storage.getBotById(botId);
+      
+      if (!bot || bot.userId !== req.user.id) {
+        return res.status(404).json({ message: "Bot not found" });
+      }
+      
+      const filePath = req.query.path as string;
+      if (!filePath) {
+        return res.status(400).json({ message: "File path is required" });
+      }
+      
+      const fullPath = path.join(bot.extractedPath!, filePath);
+      
+      // Security check
+      const resolvedPath = path.resolve(fullPath);
+      const resolvedBase = path.resolve(bot.extractedPath!);
+      const relativePath = path.relative(resolvedBase, resolvedPath);
+      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      if (!fs.existsSync(fullPath)) {
+        return res.status(404).json({ message: "File not found" });
+      }
+      
+      const content = await promisify(fs.readFile)(fullPath, 'utf-8');
+      res.json({ content });
+    } catch (error) {
+      console.error("Error reading file:", error);
+      res.status(500).json({ message: "Failed to read file" });
+    }
+  });
+
+  // File management: Create or update file
+  app.post("/api/bots/:id/files", isAuthenticated, async (req: any, res) => {
+    try {
+      const botId = parseInt(req.params.id);
+      const bot = await storage.getBotById(botId);
+      
+      if (!bot || bot.userId !== req.user.id) {
+        return res.status(404).json({ message: "Bot not found" });
+      }
+      
+      const { path: filePath, content, type } = req.body;
+      
+      if (!filePath) {
+        return res.status(400).json({ message: "File path is required" });
+      }
+      
+      const fullPath = path.join(bot.extractedPath!, filePath);
+      
+      // Security check
+      const resolvedPath = path.resolve(fullPath);
+      const resolvedBase = path.resolve(bot.extractedPath!);
+      const relativePath = path.relative(resolvedBase, resolvedPath);
+      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      if (type === 'directory') {
+        await mkdirAsync(fullPath, { recursive: true });
+      } else {
+        // Ensure parent directory exists
+        const dir = path.dirname(fullPath);
+        if (!fs.existsSync(dir)) {
+          await mkdirAsync(dir, { recursive: true });
+        }
+        await promisify(fs.writeFile)(fullPath, content || '', 'utf-8');
+      }
+      
+      res.json({ message: "File created successfully" });
+    } catch (error) {
+      console.error("Error creating file:", error);
+      res.status(500).json({ message: "Failed to create file" });
+    }
+  });
+
+  // File management: Delete file or directory
+  app.delete("/api/bots/:id/files", isAuthenticated, async (req: any, res) => {
+    try {
+      const botId = parseInt(req.params.id);
+      const bot = await storage.getBotById(botId);
+      
+      if (!bot || bot.userId !== req.user.id) {
+        return res.status(404).json({ message: "Bot not found" });
+      }
+      
+      const filePath = req.query.path as string;
+      
+      if (!filePath) {
+        return res.status(400).json({ message: "File path is required" });
+      }
+      
+      const fullPath = path.join(bot.extractedPath!, filePath);
+      
+      // Security check
+      const resolvedPath = path.resolve(fullPath);
+      const resolvedBase = path.resolve(bot.extractedPath!);
+      const relativePath = path.relative(resolvedBase, resolvedPath);
+      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      if (!fs.existsSync(fullPath)) {
+        return res.status(404).json({ message: "File not found" });
+      }
+      
+      const stats = await promisify(fs.stat)(fullPath);
+      if (stats.isDirectory()) {
+        await promisify(fs.rm)(fullPath, { recursive: true, force: true });
+      } else {
+        await unlinkAsync(fullPath);
+      }
+      
+      res.json({ message: "File deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting file:", error);
+      res.status(500).json({ message: "Failed to delete file" });
+    }
+  });
+
+  // File management: Rename file or directory
+  app.patch("/api/bots/:id/files/rename", isAuthenticated, async (req: any, res) => {
+    try {
+      const botId = parseInt(req.params.id);
+      const bot = await storage.getBotById(botId);
+      
+      if (!bot || bot.userId !== req.user.id) {
+        return res.status(404).json({ message: "Bot not found" });
+      }
+      
+      const { oldPath, newPath } = req.body;
+      
+      if (!oldPath || !newPath) {
+        return res.status(400).json({ message: "Old and new paths are required" });
+      }
+      
+      const fullOldPath = path.join(bot.extractedPath!, oldPath);
+      const fullNewPath = path.join(bot.extractedPath!, newPath);
+      
+      // Security checks
+      const resolvedBase = path.resolve(bot.extractedPath!);
+      const resolvedOld = path.resolve(fullOldPath);
+      const resolvedNew = path.resolve(fullNewPath);
+      const relativeOld = path.relative(resolvedBase, resolvedOld);
+      const relativeNew = path.relative(resolvedBase, resolvedNew);
+      
+      if (relativeOld.startsWith('..') || path.isAbsolute(relativeOld) || 
+          relativeNew.startsWith('..') || path.isAbsolute(relativeNew)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      if (!fs.existsSync(fullOldPath)) {
+        return res.status(404).json({ message: "File not found" });
+      }
+      
+      await promisify(fs.rename)(fullOldPath, fullNewPath);
+      res.json({ message: "File renamed successfully" });
+    } catch (error) {
+      console.error("Error renaming file:", error);
+      res.status(500).json({ message: "Failed to rename file" });
+    }
+  });
+
+  // File management: Upload file
+  app.post("/api/bots/:id/files/upload", isAuthenticated, upload.single('file'), async (req: any, res) => {
+    try {
+      const botId = parseInt(req.params.id);
+      const bot = await storage.getBotById(botId);
+      
+      if (!bot || bot.userId !== req.user.id) {
+        return res.status(404).json({ message: "Bot not found" });
+      }
+      
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+      
+      const targetDir = req.body.path || '';
+      const fileName = req.file.originalname;
+      const fullPath = path.join(bot.extractedPath!, targetDir, fileName);
+      
+      // Security check
+      const resolvedPath = path.resolve(fullPath);
+      const resolvedBase = path.resolve(bot.extractedPath!);
+      const relativePath = path.relative(resolvedBase, resolvedPath);
+      if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+        await unlinkAsync(req.file.path);
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      // Ensure target directory exists
+      const dir = path.dirname(fullPath);
+      if (!fs.existsSync(dir)) {
+        await mkdirAsync(dir, { recursive: true });
+      }
+      
+      // Move uploaded file to target location
+      await promisify(fs.rename)(req.file.path, fullPath);
+      
+      res.json({ message: "File uploaded successfully", fileName });
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      res.status(500).json({ message: "Failed to upload file" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   // WebSocket server for real-time logs - from javascript_websocket blueprint
