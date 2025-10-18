@@ -24,3 +24,5 @@ services:
       - key: DEVELOPER_CONTACT
         value: t.me/your_username
     autoDeploy: true
+    # Note: Python 3 is pre-installed on all Render environments
+    # No additional configuration needed for Python bot support

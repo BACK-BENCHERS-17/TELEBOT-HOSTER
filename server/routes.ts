@@ -2,7 +2,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -16,6 +16,36 @@ import { nanoid } from "nanoid";
 
 const unlinkAsync = promisify(fs.unlink);
 const mkdirAsync = promisify(fs.mkdir);
+
+// Find system Python - works on Render, Replit, and other platforms
+function findSystemPython(): string {
+  try {
+    // Try to find python3 using 'which' command
+    const pythonPath = execSync('which python3', { encoding: 'utf-8' }).trim();
+    if (pythonPath && fs.existsSync(pythonPath)) {
+      return pythonPath;
+    }
+  } catch {
+    // 'which' command failed, try common paths
+  }
+  
+  // Common Python paths across different platforms
+  const commonPaths = [
+    '/usr/bin/python3',                                        // Most Linux systems, Render
+    '/usr/local/bin/python3',                                  // macOS, some Linux
+    '/home/runner/workspace/.pythonlibs/bin/python3',          // Replit
+    '/opt/render/project/.pythonlibs/bin/python3',            // Render with Python buildpack
+  ];
+  
+  for (const pythonPath of commonPaths) {
+    if (fs.existsSync(pythonPath)) {
+      return pythonPath;
+    }
+  }
+  
+  // Fall back to just 'python3' and hope it's in PATH
+  return 'python3';
+}
 
 // File upload configuration
 const upload = multer({
@@ -1464,8 +1494,8 @@ async function launchBot(botId: number) {
         command = uvPythonPath;
         console.log(`[Bot ${botId}] Using uv virtual environment Python: ${uvPythonPath}`);
       } catch {
-        // No venv, use system python with full path
-        command = '/home/runner/workspace/.pythonlibs/bin/python3';
+        // No venv, use system python (works on Render, Replit, etc.)
+        command = findSystemPython();
         console.log(`[Bot ${botId}] Using system Python: ${command}`);
       }
     }
