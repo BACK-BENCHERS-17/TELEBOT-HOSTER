@@ -1,8 +1,49 @@
-node_modules
-dist
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build output
+dist/
+.vite/
+server/public/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Uploads and user data
+uploads/*
+!uploads/.gitkeep
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
 .DS_Store
-server/public
-vite.config.ts.*
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+tmp/
+temp/
+*.tmp
 *.tar.gz
-uploads/
+
+# Replit specific
+.replit
+replit.nix
+.upm/
+.cache/
+.config/
 .pythonlibs/
+
+# Test files
+attached_assets/
+vite.config.ts.*

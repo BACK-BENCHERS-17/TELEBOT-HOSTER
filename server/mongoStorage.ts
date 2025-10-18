@@ -74,7 +74,11 @@ export class MongoStorage implements IStorage {
   async connect() {
     if (this.connected) return;
     
-    const mongoUrl = 'mongodb+srv://chandan:chandan@cluster0.cdcw9zq.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+    const mongoUrl = process.env.MONGODB_URI || process.env.DATABASE_URL;
+    
+    if (!mongoUrl) {
+      throw new Error('MONGODB_URI environment variable is not set');
+    }
 
     try {
       await mongoose.connect(mongoUrl);
