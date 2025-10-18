@@ -1392,9 +1392,23 @@ async function launchBot(botId: number) {
     throw new Error("Bot is already running");
   }
   
+  // Validate that bot files exist
+  if (!bot.extractedPath) {
+    throw new Error("Bot files have not been uploaded. Please upload bot files before launching.");
+  }
+  
+  try {
+    await promisify(fs.access)(bot.extractedPath, fs.constants.F_OK);
+  } catch {
+    throw new Error(`Bot files not found at ${bot.extractedPath}. Please re-upload the bot files.`);
+  }
+  
   // Get environment variables
   const envVars = await storage.getEnvVarsByBotId(botId);
-  const botEnv: Record<string, string> = { ...process.env } as Record<string, string>;
+  const botEnv: Record<string, string> = { 
+    ...process.env,
+    PATH: process.env.PATH || ''
+  } as Record<string, string>;
   envVars.forEach(v => { botEnv[v.key] = v.value; });
   
   // Get the entry point - use stored path or search for it
@@ -1450,9 +1464,9 @@ async function launchBot(botId: number) {
         command = uvPythonPath;
         console.log(`[Bot ${botId}] Using uv virtual environment Python: ${uvPythonPath}`);
       } catch {
-        // No venv, use system python
-        command = 'python3';
-        console.log(`[Bot ${botId}] Using system Python`);
+        // No venv, use system python with full path
+        command = '/home/runner/workspace/.pythonlibs/bin/python3';
+        console.log(`[Bot ${botId}] Using system Python: ${command}`);
       }
     }
     args = [entryFileName];
@@ -1468,6 +1482,16 @@ async function launchBot(botId: number) {
   
   // Store process
   botProcesses.set(botId, botProcess);
+  
+  // Handle spawn errors (prevent application crash)
+  botProcess.on('error', async (error: Error) => {
+    console.error(`[Bot ${botId}] Process spawn error:`, error);
+    botProcesses.delete(botId);
+    await storage.updateBot(botId, { 
+      status: 'error', 
+      errorMessage: `Failed to start bot: ${error.message}` 
+    });
+  });
   
   // Handle process output
   botProcess.stdout.on('data', (data: Buffer) => {
