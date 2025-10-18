@@ -2,7 +2,7 @@
 
 ## Overview
 
-TELEBOT HOSTER is a platform for deploying and managing Telegram bots. Users can upload their Python or Node.js bot code as ZIP files, configure environment variables, and manage bot lifecycles (start, stop, restart) through a web dashboard. The platform features token-based authentication, real-time log streaming via WebSockets, and an admin panel for user and access token management.
+TELEBOT HOSTER is a platform for deploying and managing Telegram bots. Users can upload their Python or Node.js bot code as ZIP files, configure environment variables, and manage bot lifecycles (start, stop, restart) through a web dashboard. The platform features token-based authentication (BACK-XXXX format), real-time log streaming via WebSockets, tiered user accounts (FREE/PREMIUM), and an admin panel for user and access token management.
 
 ## User Preferences
 
@@ -35,10 +35,13 @@ Preferred communication style: Simple, everyday language.
 - Session-based authentication state synchronized with backend
 
 **Key Pages & Features**
-- Landing page with token-based login flow
+- Landing page with token-based login flow (BACK-XXXX token format)
 - Dashboard with bot list and deployment dialog
 - Bot management page with live log streaming and environment variable management
-- Admin panel for user/token CRUD operations
+- Admin panel for user/token CRUD operations with tier management
+- Tiered user system:
+  - FREE tier: Limited bot deployments (configurable limit, default 5), restricted features
+  - PREMIUM tier: Unlimited bot deployments, auto-restart service for crashed bots
 
 ### Backend Architecture
 
@@ -59,6 +62,8 @@ Preferred communication style: Simple, everyday language.
 - Child process spawning with Node.js `spawn` for running user bot code
 - WebSocket-based log streaming with per-bot client management
 - Support for Python and Node.js runtime environments
+- Auto-restart service for PREMIUM tier users (automatically restarts crashed bots after 3 seconds)
+- Usage tracking and enforcement for FREE tier users
 
 **File Upload & Processing**
 - Multer middleware for handling ZIP file uploads (50MB limit)
@@ -78,10 +83,10 @@ Preferred communication style: Simple, everyday language.
 - WebSocket connection using `ws` library for Neon serverless compatibility
 
 **Schema Design**
-- `users`: Stores user profiles with UUID primary keys
+- `users`: Stores user profiles with UUID primary keys, tier (FREE/PREMIUM), usage tracking (usageCount/usageLimit), and auto-restart settings
 - `bots`: Bot metadata including name, runtime, status, and file paths (foreign key to users)
 - `environment_variables`: Key-value pairs for bot configuration (foreign key to bots)
-- `access_tokens`: Token-based authentication credentials (foreign key to users)
+- `access_tokens`: Token-based authentication credentials in BACK-XXXX format (foreign key to users)
 - `sessions`: Session storage for express-session (JSONB session data)
 
 **Data Access Layer**
