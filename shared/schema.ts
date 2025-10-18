@@ -31,12 +31,24 @@ export const users = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
+  tier: varchar("tier", { length: 20 }).notNull().default('FREE'),
+  usageCount: integer("usage_count").notNull().default(0),
+  usageLimit: integer("usage_limit").notNull().default(5),
+  autoRestart: varchar("auto_restart", { length: 10 }).notNull().default('false'),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
+
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertUser = z.infer<typeof insertUserSchema>;
 
 // Access Tokens table - For token-based authentication
 export const accessTokens = pgTable("access_tokens", {
