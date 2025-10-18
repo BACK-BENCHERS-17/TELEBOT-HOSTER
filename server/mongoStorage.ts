@@ -22,6 +22,7 @@ const UserSchema = new mongoose.Schema({
 });
 
 const BotSchema = new mongoose.Schema({
+  numericId: { type: Number, unique: true, sparse: true },
   userId: { type: String, required: true },
   name: { type: String, required: true },
   runtime: { type: String, required: true },
@@ -37,6 +38,7 @@ const BotSchema = new mongoose.Schema({
 });
 
 const AccessTokenSchema = new mongoose.Schema({
+  numericId: { type: Number, unique: true, sparse: true },
   token: { type: String, required: true, unique: true },
   userId: { type: String, required: true },
   isActive: { type: String, default: 'true' },
@@ -46,6 +48,7 @@ const AccessTokenSchema = new mongoose.Schema({
 });
 
 const EnvironmentVariableSchema = new mongoose.Schema({
+  numericId: { type: Number, unique: true, sparse: true },
   botId: { type: Number, required: true },
   key: { type: String, required: true },
   value: { type: String, required: true },
@@ -60,6 +63,9 @@ const EnvironmentVariableModel = mongoose.model('EnvironmentVariable', Environme
 
 export class MongoStorage implements IStorage {
   private connected = false;
+  private botIdCounter = 0;
+  private tokenIdCounter = 0;
+  private envVarIdCounter = 0;
 
   async connect() {
     if (this.connected) return;
@@ -70,6 +76,64 @@ export class MongoStorage implements IStorage {
       await mongoose.connect(mongoUrl);
       this.connected = true;
       console.log('✅ Connected to MongoDB successfully');
+      
+      // Migrate legacy documents without numericId
+      console.log('🔄 Checking for legacy documents...');
+      
+      // Migrate bots
+      const botsWithoutId = await BotModel.find({ numericId: { $exists: false } }).lean();
+      if (botsWithoutId.length > 0) {
+        console.log(`📦 Migrating ${botsWithoutId.length} bots...`);
+        let maxId = 0;
+        const withId = await BotModel.findOne({ numericId: { $exists: true } }).sort({ numericId: -1 }).lean();
+        maxId = (withId as any)?.numericId || 0;
+        
+        for (const bot of botsWithoutId) {
+          await BotModel.findByIdAndUpdate(bot._id, { numericId: ++maxId });
+        }
+        console.log('✅ Bot migration complete');
+      }
+      
+      // Migrate access tokens
+      const tokensWithoutId = await AccessTokenModel.find({ numericId: { $exists: false } }).lean();
+      if (tokensWithoutId.length > 0) {
+        console.log(`📦 Migrating ${tokensWithoutId.length} access tokens...`);
+        let maxId = 0;
+        const withId = await AccessTokenModel.findOne({ numericId: { $exists: true } }).sort({ numericId: -1 }).lean();
+        maxId = (withId as any)?.numericId || 0;
+        
+        for (const token of tokensWithoutId) {
+          await AccessTokenModel.findByIdAndUpdate(token._id, { numericId: ++maxId });
+        }
+        console.log('✅ Token migration complete');
+      }
+      
+      // Migrate environment variables
+      const envVarsWithoutId = await EnvironmentVariableModel.find({ numericId: { $exists: false } }).lean();
+      if (envVarsWithoutId.length > 0) {
+        console.log(`📦 Migrating ${envVarsWithoutId.length} environment variables...`);
+        let maxId = 0;
+        const withId = await EnvironmentVariableModel.findOne({ numericId: { $exists: true } }).sort({ numericId: -1 }).lean();
+        maxId = (withId as any)?.numericId || 0;
+        
+        for (const envVar of envVarsWithoutId) {
+          await EnvironmentVariableModel.findByIdAndUpdate(envVar._id, { numericId: ++maxId });
+        }
+        console.log('✅ Environment variable migration complete');
+      }
+      
+      // Initialize counters from existing data
+      const [maxBot, maxToken, maxEnvVar] = await Promise.all([
+        BotModel.findOne().sort({ numericId: -1 }).lean(),
+        AccessTokenModel.findOne().sort({ numericId: -1 }).lean(),
+        EnvironmentVariableModel.findOne().sort({ numericId: -1 }).lean(),
+      ]);
+      
+      this.botIdCounter = (maxBot as any)?.numericId || 0;
+      this.tokenIdCounter = (maxToken as any)?.numericId || 0;
+      this.envVarIdCounter = (maxEnvVar as any)?.numericId || 0;
+      
+      console.log(`📊 ID counters: bots=${this.botIdCounter}, tokens=${this.tokenIdCounter}, envVars=${this.envVarIdCounter}`);
     } catch (error) {
       console.error('❌ MongoDB connection failed:', error);
       throw error;
@@ -128,17 +192,8 @@ export class MongoStorage implements IStorage {
   // Access Token operations
   private mapTokenFromMongo(token: any): AccessToken {
     const { _id, __v, ...rest } = token;
-    // Convert MongoDB ObjectId to a numeric ID using a hash
-    const idStr = _id.toString();
-    let numericId = 0;
-    for (let i = 0; i < idStr.length; i++) {
-      numericId = ((numericId << 5) - numericId) + idStr.charCodeAt(i);
-      numericId = numericId & numericId;
-    }
-    numericId = Math.abs(numericId);
-    
     return {
-      id: numericId,
+      id: rest.numericId,
       token: rest.token,
       userId: rest.userId,
       isActive: rest.isActive || 'true',
@@ -168,22 +223,17 @@ export class MongoStorage implements IStorage {
 
   async createToken(tokenData: InsertAccessToken): Promise<AccessToken> {
     await this.connect();
-    const token = await AccessTokenModel.create(tokenData);
+    const numericId = ++this.tokenIdCounter;
+    const token = await AccessTokenModel.create({ ...tokenData, numericId });
     return this.mapTokenFromMongo(token.toObject());
   }
 
   async updateToken(id: number, updates: Partial<AccessToken>): Promise<AccessToken> {
     await this.connect();
-    const tokens = await AccessTokenModel.find().lean<any>();
-    const tokenDoc = tokens.find((t: any) => {
-      const mapped = this.mapTokenFromMongo(t);
-      return mapped.id === id;
-    });
-    if (!tokenDoc) throw new Error('Token not found');
-    
-    const token = await AccessTokenModel.findByIdAndUpdate(
-      tokenDoc._id,
-      updates,
+    const { id: _, ...updateData } = updates;
+    const token = await AccessTokenModel.findOneAndUpdate(
+      { numericId: id },
+      updateData,
       { new: true }
     ).lean<any>();
     if (!token) throw new Error('Token not found');
@@ -192,30 +242,14 @@ export class MongoStorage implements IStorage {
 
   async deleteToken(id: number): Promise<void> {
     await this.connect();
-    const tokens = await AccessTokenModel.find().lean<any>();
-    const tokenDoc = tokens.find((t: any) => {
-      const mapped = this.mapTokenFromMongo(t);
-      return mapped.id === id;
-    });
-    if (tokenDoc) {
-      await AccessTokenModel.findByIdAndDelete(tokenDoc._id);
-    }
+    await AccessTokenModel.findOneAndDelete({ numericId: id });
   }
 
   // Bot operations
   private mapBotFromMongo(bot: any): Bot {
     const { _id, __v, ...rest } = bot;
-    // Convert MongoDB ObjectId to a numeric ID using a hash of the hex string
-    const idStr = _id.toString();
-    let numericId = 0;
-    for (let i = 0; i < idStr.length; i++) {
-      numericId = ((numericId << 5) - numericId) + idStr.charCodeAt(i);
-      numericId = numericId & numericId; // Convert to 32-bit integer
-    }
-    numericId = Math.abs(numericId);
-    
     return {
-      id: numericId,
+      id: rest.numericId,
       userId: rest.userId,
       name: rest.name,
       runtime: rest.runtime,
@@ -233,11 +267,7 @@ export class MongoStorage implements IStorage {
 
   async getBotById(id: number): Promise<Bot | undefined> {
     await this.connect();
-    const bots = await BotModel.find().lean<any>();
-    const bot = bots.find((b: any) => {
-      const mapped = this.mapBotFromMongo(b);
-      return mapped.id === id;
-    });
+    const bot = await BotModel.findOne({ numericId: id }).lean<any>();
     return bot ? this.mapBotFromMongo(bot) : undefined;
   }
 
@@ -249,22 +279,17 @@ export class MongoStorage implements IStorage {
 
   async createBot(botData: InsertBot): Promise<Bot> {
     await this.connect();
-    const bot = await BotModel.create(botData);
+    const numericId = ++this.botIdCounter;
+    const bot = await BotModel.create({ ...botData, numericId });
     return this.mapBotFromMongo(bot.toObject());
   }
 
   async updateBot(id: number, updates: Partial<Bot>): Promise<Bot> {
     await this.connect();
-    const bots = await BotModel.find().lean<any>();
-    const botDoc = bots.find((b: any) => {
-      const mapped = this.mapBotFromMongo(b);
-      return mapped.id === id;
-    });
-    if (!botDoc) throw new Error('Bot not found');
-    
-    const bot = await BotModel.findByIdAndUpdate(
-      botDoc._id,
-      { ...updates, updatedAt: new Date() },
+    const { id: _, ...updateData } = updates;
+    const bot = await BotModel.findOneAndUpdate(
+      { numericId: id },
+      { ...updateData, updatedAt: new Date() },
       { new: true }
     ).lean<any>();
     if (!bot) throw new Error('Bot not found');
@@ -273,30 +298,14 @@ export class MongoStorage implements IStorage {
 
   async deleteBot(id: number): Promise<void> {
     await this.connect();
-    const bots = await BotModel.find().lean<any>();
-    const botDoc = bots.find((b: any) => {
-      const mapped = this.mapBotFromMongo(b);
-      return mapped.id === id;
-    });
-    if (botDoc) {
-      await BotModel.findByIdAndDelete(botDoc._id);
-    }
+    await BotModel.findOneAndDelete({ numericId: id });
   }
 
   // Environment variable operations
   private mapEnvVarFromMongo(envVar: any): EnvironmentVariable {
     const { _id, __v, ...rest } = envVar;
-    // Convert MongoDB ObjectId to a numeric ID using a hash
-    const idStr = _id.toString();
-    let numericId = 0;
-    for (let i = 0; i < idStr.length; i++) {
-      numericId = ((numericId << 5) - numericId) + idStr.charCodeAt(i);
-      numericId = numericId & numericId;
-    }
-    numericId = Math.abs(numericId);
-    
     return {
-      id: numericId,
+      id: rest.numericId,
       botId: rest.botId,
       key: rest.key,
       value: rest.value,
@@ -313,19 +322,13 @@ export class MongoStorage implements IStorage {
 
   async createEnvVar(envVarData: InsertEnvironmentVariable): Promise<EnvironmentVariable> {
     await this.connect();
-    const envVar = await EnvironmentVariableModel.create(envVarData);
+    const numericId = ++this.envVarIdCounter;
+    const envVar = await EnvironmentVariableModel.create({ ...envVarData, numericId });
     return this.mapEnvVarFromMongo(envVar.toObject());
   }
 
   async deleteEnvVar(id: number): Promise<void> {
     await this.connect();
-    const envVars = await EnvironmentVariableModel.find().lean<any>();
-    const envVarDoc = envVars.find((e: any) => {
-      const mapped = this.mapEnvVarFromMongo(e);
-      return mapped.id === id;
-    });
-    if (envVarDoc) {
-      await EnvironmentVariableModel.findByIdAndDelete(envVarDoc._id);
-    }
+    await EnvironmentVariableModel.findOneAndDelete({ numericId: id });
   }
 }
