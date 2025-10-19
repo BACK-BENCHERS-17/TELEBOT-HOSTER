@@ -203,11 +203,6 @@ export default function AdminPanel() {
   const handleDownloadProject = async () => {
     setIsDownloading(true);
     try {
-      toast({ 
-        title: "Preparing to download...", 
-        description: "Creating project archive..."
-      });
-      
       const response = await fetch('/api/admin/download-project', {
         method: 'GET',
         credentials: 'include',
@@ -217,14 +212,10 @@ export default function AdminPanel() {
         throw new Error('Download failed');
       }
 
-      toast({ 
-        title: "Downloading...", 
-        description: "Please wait while the file downloads..."
-      });
-
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
+      a.style.display = 'none';
       a.href = url;
       
       const contentDisposition = response.headers.get('Content-Disposition');
@@ -235,13 +226,11 @@ export default function AdminPanel() {
       a.download = filename;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
       
-      toast({ 
-        title: "Download complete!", 
-        description: `${filename} has been saved to your downloads folder.`
-      });
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      }, 100);
     } catch (error) {
       console.error('Download error:', error);
       toast({ 
