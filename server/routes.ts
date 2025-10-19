@@ -8,6 +8,7 @@ import path from "path";
 import fs from "fs";
 import { promisify } from "util";
 import unzipper from "unzipper";
+import archiver from "archiver";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin } from "./tokenAuth";
 import { ADMIN_CREDENTIALS, DEVELOPER_CONTACT } from "./adminConfig";
@@ -153,6 +154,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
       uptime: process.uptime(),
       message: 'Server is running'
     });
+  });
+
+  // Download project as zip (admin only)
+  app.get('/api/admin/download-project', isAdmin, async (req: any, res) => {
+    try {
+      const projectRoot = path.resolve(process.cwd());
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const zipFileName = `telebot-hoster-${timestamp}.zip`;
+
+      // Set response headers
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="${zipFileName}"`);
+
+      // Create archive
+      const archive = archiver('zip', {
+        zlib: { level: 9 } // Maximum compression
+      });
+
+      // Handle archive errors
+      archive.on('error', (err: Error) => {
+        console.error('Archive error:', err);
+        res.status(500).json({ message: 'Failed to create archive' });
+      });
+
+      // Pipe archive data to response
+      archive.pipe(res);
+
+      // Files and directories to exclude
+      const excludePatterns = [
+        'node_modules',
+        '.git',
+        '.cache',
+        'dist',
+        'uploads/bots',
+        'logs',
+        '.env',
+        '.replit',
+        '.upm',
+        '*.log',
+        '.DS_Store',
+        'Thumbs.db'
+      ];
+
+      // Add all files except excluded ones
+      archive.glob('**/*', {
+        cwd: projectRoot,
+        ignore: excludePatterns,
+        dot: true // Include hidden files like .gitignore, .env.example
+      });
+
+      // Finalize the archive
+      await archive.finalize();
+
+      console.log(`[Admin] Project downloaded as ${zipFileName}`);
+    } catch (error) {
+      console.error('Error creating project zip:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ message: 'Failed to download project' });
+      }
+    }
   });
 
   // Admin routes for token management

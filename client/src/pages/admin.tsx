@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Shield, Users, Key, Copy, Trash2, Plus, LogOut, Edit } from "lucide-react";
+import { Shield, Users, Key, Copy, Trash2, Plus, LogOut, Edit, Download } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useLocation } from "wouter";
 
@@ -199,6 +199,46 @@ export default function AdminPanel() {
     toast({ title: "Copied to clipboard" });
   };
 
+  const handleDownloadProject = async () => {
+    try {
+      toast({ title: "Preparing download..." });
+      
+      const response = await fetch('/api/admin/download-project', {
+        method: 'GET',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Download failed');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      const contentDisposition = response.headers.get('Content-Disposition');
+      const filename = contentDisposition
+        ? contentDisposition.split('filename=')[1]?.replace(/"/g, '')
+        : `telebot-hoster-${new Date().toISOString().slice(0, 10)}.zip`;
+      
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      toast({ title: "Project downloaded successfully!" });
+    } catch (error) {
+      console.error('Download error:', error);
+      toast({ 
+        title: "Download failed", 
+        description: "Please try again",
+        variant: "destructive" 
+      });
+    }
+  };
+
   if (!adminCheck?.isAdmin && !isLoggedIn) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -257,6 +297,15 @@ export default function AdminPanel() {
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleDownloadProject}
+              data-testid="button-download-project"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download Project
+            </Button>
             <Button
               variant="outline"
               size="sm"
