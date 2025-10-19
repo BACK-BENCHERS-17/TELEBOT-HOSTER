@@ -145,6 +145,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ contact: DEVELOPER_CONTACT });
   });
 
+  // Alive/health check endpoint for uptime monitoring
+  app.get('/api/alive', (req, res) => {
+    res.status(200).json({
+      status: 'alive',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      message: 'Server is running'
+    });
+  });
+
   // Admin routes for token management
   app.get('/api/admin/users', isAdmin, async (req: any, res) => {
     try {

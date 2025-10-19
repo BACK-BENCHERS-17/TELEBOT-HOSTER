@@ -11,12 +11,14 @@ import Dashboard from "@/pages/dashboard";
 import BotManagement from "@/pages/bot-management";
 import TokenLogin from "@/pages/token-login";
 import AdminPanel from "@/pages/admin";
+import AlivePage from "@/pages/alive";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
 
   return (
     <Switch>
+      <Route path="/alive" component={AlivePage} />
       <Route path="/admin" component={AdminPanel} />
       <Route path="/token-login" component={TokenLogin} />
       {isLoading || !isAuthenticated ? (
