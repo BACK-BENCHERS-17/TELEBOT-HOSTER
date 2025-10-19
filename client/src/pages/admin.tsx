@@ -33,6 +33,7 @@ export default function AdminPanel() {
   const [editUsageLimit, setEditUsageLimit] = useState("");
   const [editAutoRestart, setEditAutoRestart] = useState(false);
   const [editUsageCount, setEditUsageCount] = useState("");
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const { data: adminCheck } = useQuery({
     queryKey: ["/api/auth/admin-check"],
@@ -200,8 +201,12 @@ export default function AdminPanel() {
   };
 
   const handleDownloadProject = async () => {
+    setIsDownloading(true);
     try {
-      toast({ title: "Preparing download..." });
+      toast({ 
+        title: "Preparing to download...", 
+        description: "Creating project archive..."
+      });
       
       const response = await fetch('/api/admin/download-project', {
         method: 'GET',
@@ -211,6 +216,11 @@ export default function AdminPanel() {
       if (!response.ok) {
         throw new Error('Download failed');
       }
+
+      toast({ 
+        title: "Downloading...", 
+        description: "Please wait while the file downloads..."
+      });
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -228,14 +238,19 @@ export default function AdminPanel() {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
       
-      toast({ title: "Project downloaded successfully!" });
+      toast({ 
+        title: "Download complete!", 
+        description: `${filename} has been saved to your downloads folder.`
+      });
     } catch (error) {
       console.error('Download error:', error);
       toast({ 
         title: "Download failed", 
-        description: "Please try again",
+        description: "Please check your connection and try again",
         variant: "destructive" 
       });
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -301,10 +316,11 @@ export default function AdminPanel() {
               variant="default"
               size="sm"
               onClick={handleDownloadProject}
+              disabled={isDownloading}
               data-testid="button-download-project"
             >
               <Download className="h-4 w-4 mr-2" />
-              Download Project
+              {isDownloading ? "Downloading..." : "Download Project"}
             </Button>
             <Button
               variant="outline"
