@@ -200,47 +200,19 @@ export default function AdminPanel() {
     toast({ title: "Copied to clipboard" });
   };
 
-  const handleDownloadProject = async () => {
+  const handleDownloadProject = () => {
     setIsDownloading(true);
-    try {
-      const response = await fetch('/api/admin/download-project', {
-        method: 'GET',
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        throw new Error('Download failed');
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = url;
-      
-      const contentDisposition = response.headers.get('Content-Disposition');
-      const filename = contentDisposition
-        ? contentDisposition.split('filename=')[1]?.replace(/"/g, '')
-        : `telebot-hoster-${new Date().toISOString().slice(0, 10)}.zip`;
-      
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      
-      setTimeout(() => {
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-      }, 100);
-    } catch (error) {
-      console.error('Download error:', error);
-      toast({ 
-        title: "Download failed", 
-        description: "Please check your connection and try again",
-        variant: "destructive" 
-      });
-    } finally {
+    
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = '/api/admin/download-project';
+    
+    document.body.appendChild(iframe);
+    
+    setTimeout(() => {
+      document.body.removeChild(iframe);
       setIsDownloading(false);
-    }
+    }, 5000);
   };
 
   if (!adminCheck?.isAdmin && !isLoggedIn) {
