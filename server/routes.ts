@@ -1767,10 +1767,55 @@ async function launchBot(botId: number) {
     throw new Error("Bot files have not been uploaded. Please upload bot files before launching.");
   }
   
+  // Check if bot files exist on filesystem
+  let filesExist = false;
   try {
     await promisify(fs.access)(bot.extractedPath, fs.constants.F_OK);
+    filesExist = true;
   } catch {
-    throw new Error(`Bot files not found at ${bot.extractedPath}. Please re-upload the bot files.`);
+    filesExist = false;
+  }
+  
+  // If files don't exist but we have GridFS ID, restore from GridFS
+  if (!filesExist && bot.gridfsFileId) {
+    console.log(`[Bot ${botId}] Files not found on filesystem, restoring from GridFS...`);
+    
+    try {
+      // Create temp directory for ZIP
+      const tempZipPath = path.join('uploads', `temp_${botId}_${Date.now()}.zip`);
+      await mkdirAsync('uploads', { recursive: true });
+      
+      // Download ZIP from GridFS
+      const gridfsStream = await storage.getBotFile(bot.gridfsFileId);
+      const writeStream = fs.createWriteStream(tempZipPath);
+      
+      await new Promise<void>((resolve, reject) => {
+        gridfsStream.pipe(writeStream);
+        writeStream.on('finish', resolve);
+        writeStream.on('error', reject);
+        gridfsStream.on('error', reject);
+      });
+      
+      console.log(`[Bot ${botId}] Downloaded ZIP from GridFS to ${tempZipPath}`);
+      
+      // Extract ZIP to extractedPath
+      await mkdirAsync(bot.extractedPath, { recursive: true });
+      await fs.createReadStream(tempZipPath)
+        .pipe(unzipper.Extract({ path: bot.extractedPath }))
+        .promise();
+      
+      console.log(`[Bot ${botId}] Extracted ZIP to ${bot.extractedPath}`);
+      
+      // Clean up temp ZIP
+      await unlinkAsync(tempZipPath);
+      
+      console.log(`✅ Bot ${botId} files restored from GridFS`);
+    } catch (error: any) {
+      console.error(`[Bot ${botId}] Failed to restore files from GridFS:`, error);
+      throw new Error(`Failed to restore bot files from database: ${error.message}`);
+    }
+  } else if (!filesExist) {
+    throw new Error(`Bot files not found. Please re-upload the bot.`);
   }
   
   // Get environment variables
