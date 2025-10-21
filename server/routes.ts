@@ -237,20 +237,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Repository URL and GitHub token are required' });
       }
 
-      // Validate repository URL format
-      const urlPattern = /^https:\/\/github\.com\/[\w-]+\/[\w-]+(?:\.git)?$/;
-      if (!urlPattern.test(repoUrl.trim())) {
+      // Validate repository URL format - allow dots and common GitHub repo name characters
+      const urlPattern = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+(?:\.git)?$/;
+      const trimmedRepoUrl = repoUrl.trim();
+      
+      if (!urlPattern.test(trimmedRepoUrl) || trimmedRepoUrl.includes(' ')) {
         return res.status(400).json({ 
           message: 'Invalid repository URL. Must be in format: https://github.com/username/repository' 
         });
       }
 
-      // Validate branch name (alphanumeric, hyphens, underscores, forward slashes)
+      // Validate branch name - allow dots, hyphens, underscores, slashes (common in release branches)
       const finalBranch = (branch || 'main').trim();
-      const branchPattern = /^[\w\/-]+$/;
-      if (!branchPattern.test(finalBranch)) {
+      const branchPattern = /^[\w.\/-]+$/;
+      
+      if (!branchPattern.test(finalBranch) || finalBranch.includes(' ')) {
         return res.status(400).json({ 
-          message: 'Invalid branch name. Only alphanumeric characters, hyphens, underscores, and slashes allowed' 
+          message: 'Invalid branch name. Cannot contain spaces or special characters except . - / _' 
         });
       }
 
@@ -325,46 +328,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log('[GitHub Push] No changes to commit');
         }
 
-        // Use GIT_ASKPASS environment variable to provide credentials without storing in config
-        const tempCredHelper = (resolve: any, reject: any) => {
-          // Push with credentials in URL (one-time use)
-          const repoWithAuth = repoUrl.replace('https://', `https://x-access-token:${token}@`);
+        // Create a temporary askpass script to provide credentials without exposing in command args
+        const askPassScript = path.join('/tmp', `git-askpass-${Date.now()}.sh`);
+        const scriptContent = `#!/bin/sh\necho "${token}"`;
+        
+        await promisify(fs.writeFile)(askPassScript, scriptContent, { mode: 0o700 });
+        
+        try {
+          // Push to GitHub using askpass helper (credentials not in command args or process list)
+          console.log('[GitHub Push] Pushing to GitHub...');
           
-          const git = spawn('git', ['push', repoWithAuth, finalBranch], {
-            stdio: 'pipe',
-            env: { 
-              ...process.env,
-              GIT_TERMINAL_PROMPT: '0' // Disable terminal prompts
-            }
+          await new Promise((resolve, reject) => {
+            const git = spawn('git', ['push', trimmedRepoUrl, finalBranch], {
+              stdio: 'pipe',
+              env: { 
+                ...process.env,
+                GIT_ASKPASS: askPassScript,
+                GIT_TERMINAL_PROMPT: '0',
+                GIT_USERNAME: 'x-access-token'
+              }
+            });
+            
+            let stdout = '';
+            let stderr = '';
+            
+            git.stdout?.on('data', (data) => {
+              stdout += data.toString();
+            });
+            
+            git.stderr?.on('data', (data) => {
+              stderr += data.toString();
+            });
+            
+            git.on('error', (err) => {
+              reject(new Error(`Failed to push: ${err.message}`));
+            });
+            
+            git.on('close', (code) => {
+              if (code === 0) {
+                resolve(stdout + stderr);
+              } else {
+                reject(new Error(stderr || stdout || `Push failed with exit code ${code}`));
+              }
+            });
           });
-          
-          let stdout = '';
-          let stderr = '';
-          
-          git.stdout?.on('data', (data) => {
-            stdout += data.toString();
-          });
-          
-          git.stderr?.on('data', (data) => {
-            stderr += data.toString();
-          });
-          
-          git.on('error', (err) => {
-            reject(new Error(`Failed to push: ${err.message}`));
-          });
-          
-          git.on('close', (code) => {
-            if (code === 0) {
-              resolve(stdout + stderr);
-            } else {
-              reject(new Error(stderr || stdout || `Push failed with exit code ${code}`));
-            }
-          });
-        };
-
-        // Push to GitHub using one-time credentials
-        console.log('[GitHub Push] Pushing to GitHub...');
-        await new Promise(tempCredHelper);
+        } finally {
+          // Clean up askpass script immediately after use
+          try {
+            await unlinkAsync(askPassScript);
+          } catch (err) {
+            console.error('[GitHub Push] Failed to clean up askpass script:', err);
+          }
+        }
 
         console.log('[GitHub Push] Successfully pushed to GitHub');
         
