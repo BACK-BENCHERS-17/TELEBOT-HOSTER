@@ -1171,6 +1171,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await promisify(fs.rm)(bot.extractedPath, { recursive: true, force: true });
       }
       
+      // Delete from GridFS if exists
+      if (bot.gridfsFileId) {
+        try {
+          await storage.deleteBotFile(bot.gridfsFileId);
+          console.log(`[Bot ${botId}] Deleted ZIP from GridFS`);
+        } catch (error) {
+          console.error(`[Bot ${botId}] Failed to delete GridFS file:`, error);
+        }
+      }
+      
       // Delete from database
       await storage.deleteBot(botId);
       
