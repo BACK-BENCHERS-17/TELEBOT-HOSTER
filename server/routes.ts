@@ -227,6 +227,166 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Push to GitHub (admin only)
+  app.post('/api/admin/github-push', isAdmin, async (req: any, res) => {
+    try {
+      const { repoUrl, branch, token, commitMessage } = req.body;
+
+      // Validate inputs
+      if (!repoUrl || !token) {
+        return res.status(400).json({ message: 'Repository URL and GitHub token are required' });
+      }
+
+      // Validate repository URL format
+      const urlPattern = /^https:\/\/github\.com\/[\w-]+\/[\w-]+(?:\.git)?$/;
+      if (!urlPattern.test(repoUrl.trim())) {
+        return res.status(400).json({ 
+          message: 'Invalid repository URL. Must be in format: https://github.com/username/repository' 
+        });
+      }
+
+      // Validate branch name (alphanumeric, hyphens, underscores, forward slashes)
+      const finalBranch = (branch || 'main').trim();
+      const branchPattern = /^[\w\/-]+$/;
+      if (!branchPattern.test(finalBranch)) {
+        return res.status(400).json({ 
+          message: 'Invalid branch name. Only alphanumeric characters, hyphens, underscores, and slashes allowed' 
+        });
+      }
+
+      const finalMessage = (commitMessage || `Update from admin panel - ${new Date().toISOString()}`).trim();
+      
+      // Sanitize commit message - remove quotes and special chars that could break git
+      const sanitizedMessage = finalMessage.replace(/["'`\\$]/g, '');
+
+      console.log('[GitHub Push] Starting push process...');
+      
+      // Execute git commands safely using spawn
+      try {
+        // Helper function to run git commands safely
+        const runGitCommand = (args: string[]): Promise<string> => {
+          return new Promise((resolve, reject) => {
+            const git = spawn('git', args, { 
+              stdio: 'pipe',
+              env: { ...process.env }
+            });
+            
+            let stdout = '';
+            let stderr = '';
+            
+            git.stdout?.on('data', (data) => {
+              stdout += data.toString();
+            });
+            
+            git.stderr?.on('data', (data) => {
+              stderr += data.toString();
+            });
+            
+            git.on('error', (err) => {
+              reject(new Error(`Failed to execute git: ${err.message}`));
+            });
+            
+            git.on('close', (code) => {
+              if (code === 0) {
+                resolve(stdout);
+              } else {
+                reject(new Error(stderr || stdout || `Git command failed with exit code ${code}`));
+              }
+            });
+          });
+        };
+
+        // Configure git user if not already set
+        try {
+          await runGitCommand(['config', 'user.email']);
+        } catch {
+          await runGitCommand(['config', 'user.email', 'admin@telebot-hoster.local']);
+          await runGitCommand(['config', 'user.name', 'Telebot Hoster Admin']);
+        }
+
+        // Add all files
+        console.log('[GitHub Push] Adding files...');
+        await runGitCommand(['add', '.']);
+
+        // Check if there are changes to commit
+        let hasChanges = false;
+        try {
+          const status = await runGitCommand(['status', '--porcelain']);
+          hasChanges = status.trim().length > 0;
+        } catch {
+          hasChanges = true;
+        }
+
+        if (hasChanges) {
+          // Commit changes
+          console.log('[GitHub Push] Committing changes...');
+          await runGitCommand(['commit', '-m', sanitizedMessage]);
+        } else {
+          console.log('[GitHub Push] No changes to commit');
+        }
+
+        // Use GIT_ASKPASS environment variable to provide credentials without storing in config
+        const tempCredHelper = (resolve: any, reject: any) => {
+          // Push with credentials in URL (one-time use)
+          const repoWithAuth = repoUrl.replace('https://', `https://x-access-token:${token}@`);
+          
+          const git = spawn('git', ['push', repoWithAuth, finalBranch], {
+            stdio: 'pipe',
+            env: { 
+              ...process.env,
+              GIT_TERMINAL_PROMPT: '0' // Disable terminal prompts
+            }
+          });
+          
+          let stdout = '';
+          let stderr = '';
+          
+          git.stdout?.on('data', (data) => {
+            stdout += data.toString();
+          });
+          
+          git.stderr?.on('data', (data) => {
+            stderr += data.toString();
+          });
+          
+          git.on('error', (err) => {
+            reject(new Error(`Failed to push: ${err.message}`));
+          });
+          
+          git.on('close', (code) => {
+            if (code === 0) {
+              resolve(stdout + stderr);
+            } else {
+              reject(new Error(stderr || stdout || `Push failed with exit code ${code}`));
+            }
+          });
+        };
+
+        // Push to GitHub using one-time credentials
+        console.log('[GitHub Push] Pushing to GitHub...');
+        await new Promise(tempCredHelper);
+
+        console.log('[GitHub Push] Successfully pushed to GitHub');
+        
+        res.json({ 
+          success: true, 
+          message: 'Successfully pushed to GitHub',
+          hasChanges,
+          branch: finalBranch
+        });
+      } catch (error: any) {
+        console.error('[GitHub Push] Git command failed:', error.message);
+        throw new Error(`Git operation failed: ${error.message}`);
+      }
+    } catch (error: any) {
+      console.error('[GitHub Push] Error:', error);
+      res.status(500).json({ 
+        message: error.message || 'Failed to push to GitHub',
+        details: 'Check server logs for more information'
+      });
+    }
+  });
+
   // Admin routes for token management
   app.get('/api/admin/users', isAdmin, async (req: any, res) => {
     try {

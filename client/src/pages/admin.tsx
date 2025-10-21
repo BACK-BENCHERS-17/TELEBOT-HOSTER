@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Shield, Users, Key, Copy, Trash2, Plus, LogOut, Edit, Download } from "lucide-react";
+import { Shield, Users, Key, Copy, Trash2, Plus, LogOut, Edit, Download, Upload, Github } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useLocation } from "wouter";
 
@@ -34,6 +34,11 @@ export default function AdminPanel() {
   const [editAutoRestart, setEditAutoRestart] = useState(false);
   const [editUsageCount, setEditUsageCount] = useState("");
   const [isDownloading, setIsDownloading] = useState(false);
+  
+  const [githubRepoUrl, setGithubRepoUrl] = useState("");
+  const [githubBranch, setGithubBranch] = useState("main");
+  const [githubToken, setGithubToken] = useState("");
+  const [githubCommitMessage, setGithubCommitMessage] = useState("");
 
   const { data: adminCheck } = useQuery({
     queryKey: ["/api/auth/admin-check"],
@@ -215,6 +220,31 @@ export default function AdminPanel() {
     }, 5000);
   };
 
+  const githubPushMutation = useMutation({
+    mutationFn: async (data: { 
+      repoUrl: string; 
+      branch: string; 
+      token: string;
+      commitMessage: string;
+    }) => {
+      const res = await apiRequest("POST", "/api/admin/github-push", data);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ 
+        title: "Successfully pushed to GitHub",
+        description: data.hasChanges ? `Pushed to ${data.branch}` : "No changes to commit"
+      });
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Failed to push to GitHub", 
+        description: error.message || "Unknown error",
+        variant: "destructive" 
+      });
+    },
+  });
+
   if (!adminCheck?.isAdmin && !isLoggedIn) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -298,7 +328,7 @@ export default function AdminPanel() {
 
       <main className="container mx-auto p-6 max-w-7xl">
         <Tabs defaultValue="users" className="space-y-6">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsList className="grid w-full max-w-2xl grid-cols-3">
             <TabsTrigger value="users" data-testid="tab-users">
               <Users className="h-4 w-4 mr-2" />
               Users
@@ -306,6 +336,10 @@ export default function AdminPanel() {
             <TabsTrigger value="tokens" data-testid="tab-tokens">
               <Key className="h-4 w-4 mr-2" />
               Tokens
+            </TabsTrigger>
+            <TabsTrigger value="github" data-testid="tab-github">
+              <Github className="h-4 w-4 mr-2" />
+              GitHub
             </TabsTrigger>
           </TabsList>
 
@@ -596,6 +630,116 @@ export default function AdminPanel() {
                       No tokens found. Create a user first, then generate a token for them.
                     </p>
                   )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="github" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Github className="h-5 w-5" />
+                  Push to GitHub
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="github-repo-url">Repository URL</Label>
+                  <Input
+                    id="github-repo-url"
+                    type="text"
+                    placeholder="https://github.com/username/repository"
+                    value={githubRepoUrl}
+                    onChange={(e) => setGithubRepoUrl(e.target.value)}
+                    data-testid="input-github-repo-url"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    The HTTPS URL of your GitHub repository
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="github-branch">Branch</Label>
+                  <Input
+                    id="github-branch"
+                    type="text"
+                    placeholder="main"
+                    value={githubBranch}
+                    onChange={(e) => setGithubBranch(e.target.value)}
+                    data-testid="input-github-branch"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    The branch to push to (default: main)
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="github-token">GitHub Personal Access Token</Label>
+                  <Input
+                    id="github-token"
+                    type="password"
+                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                    value={githubToken}
+                    onChange={(e) => setGithubToken(e.target.value)}
+                    data-testid="input-github-token"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Create a token at GitHub → Settings → Developer settings → Personal access tokens
+                    <br />
+                    Required scopes: <code className="text-xs bg-muted px-1 py-0.5 rounded">repo</code>
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="github-commit-message">Commit Message (optional)</Label>
+                  <Input
+                    id="github-commit-message"
+                    type="text"
+                    placeholder="Update from admin panel"
+                    value={githubCommitMessage}
+                    onChange={(e) => setGithubCommitMessage(e.target.value)}
+                    data-testid="input-github-commit-message"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Leave empty to use default message with timestamp
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => {
+                      if (!githubRepoUrl || !githubToken) {
+                        toast({
+                          title: "Missing required fields",
+                          description: "Please provide repository URL and GitHub token",
+                          variant: "destructive"
+                        });
+                        return;
+                      }
+                      githubPushMutation.mutate({
+                        repoUrl: githubRepoUrl,
+                        branch: githubBranch || "main",
+                        token: githubToken,
+                        commitMessage: githubCommitMessage
+                      });
+                    }}
+                    disabled={githubPushMutation.isPending}
+                    data-testid="button-github-push"
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    {githubPushMutation.isPending ? "Pushing..." : "Push to GitHub"}
+                  </Button>
+                </div>
+
+                <div className="mt-6 p-4 bg-muted rounded-lg space-y-2">
+                  <h4 className="font-semibold text-sm">ℹ️ Important Notes:</h4>
+                  <ul className="text-sm space-y-1 text-muted-foreground list-disc list-inside">
+                    <li>This will commit and push ALL files including bot uploads</li>
+                    <li>Make sure your <code className="text-xs bg-background px-1 py-0.5 rounded">.gitignore</code> is configured correctly</li>
+                    <li>If you're deploying to Render with auto-deploy, this will trigger a redeploy</li>
+                    <li>Your GitHub token is NOT stored - you need to enter it each time</li>
+                  </ul>
                 </div>
               </CardContent>
             </Card>
