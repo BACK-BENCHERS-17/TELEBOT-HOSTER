@@ -340,18 +340,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log('[GitHub Push] No changes to commit');
         }
 
-        // Push to GitHub using authenticated URL (credentials only in memory, never written to disk)
+        // Push to GitHub using GIT_ASKPASS (secure with temporary script and proper cleanup)
         console.log('[GitHub Push] Pushing to GitHub...');
         
-        // Build authenticated URL with token (more secure than file-based approach)
-        const urlParts = trimmedRepoUrl.replace('https://', '').split('/');
-        const authenticatedUrl = `https://x-access-token:${token}@${urlParts.join('/')}`;
+        const askPassScript = path.join('/tmp', `git-askpass-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.sh`);
+        const scriptContent = `#!/bin/sh\ncase "$1" in\n  Username*) echo "x-access-token" ;;\n  Password*) echo "${token.replace(/"/g, '\\"')}" ;;\n  *) echo "${token.replace(/"/g, '\\"')}" ;;\nesac`;
         
-        const pushArgs = forcePush 
-          ? ['push', authenticatedUrl, finalBranch, '--force']
-          : ['push', authenticatedUrl, finalBranch];
-        
-        await runGitCommand(pushArgs, true);
+        try {
+          // Create askpass script with restrictive permissions (only readable/executable by owner)
+          await promisify(fs.writeFile)(askPassScript, scriptContent, { mode: 0o700 });
+          
+          try {
+            await new Promise<void>((resolve, reject) => {
+              const pushArgs = forcePush 
+                ? ['push', trimmedRepoUrl, finalBranch, '--force']
+                : ['push', trimmedRepoUrl, finalBranch];
+                
+              const git = spawn('git', pushArgs, {
+                stdio: 'pipe',
+                env: {
+                  ...process.env,
+                  GIT_ASKPASS: askPassScript,
+                  GIT_TERMINAL_PROMPT: '0',
+                }
+              });
+              
+              let stdout = '';
+              let stderr = '';
+              
+              git.stdout?.on('data', (data) => {
+                stdout += data.toString();
+              });
+              
+              git.stderr?.on('data', (data) => {
+                stderr += data.toString();
+              });
+              
+              git.on('error', (err) => {
+                reject(new Error(`Failed to execute git push: ${err.message}`));
+              });
+              
+              git.on('close', (code) => {
+                if (code === 0) {
+                  resolve();
+                } else {
+                  // Sanitize error message to remove any token traces
+                  const sanitizedError = stderr.replace(new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '[REDACTED]');
+                  reject(new Error(sanitizedError || stdout || `Push failed with exit code ${code}`));
+                }
+              });
+            });
+          } finally {
+            // Always clean up askpass script, even if push fails
+            try {
+              await unlinkAsync(askPassScript);
+            } catch (cleanupErr) {
+              console.error('[GitHub Push] Warning: Failed to clean up askpass script:', cleanupErr);
+            }
+          }
+        } catch (scriptErr) {
+          throw new Error(`Failed to create credential helper: ${scriptErr instanceof Error ? scriptErr.message : 'Unknown error'}`);
+        }
 
         console.log('[GitHub Push] Successfully pushed to GitHub');
         
@@ -362,20 +411,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
           branch: finalBranch
         });
       } catch (error: any) {
-        console.error('[GitHub Push] Git command failed:', error.message);
+        const errorMsg = error.message || '';
+        console.error('[GitHub Push] Git command failed:', errorMsg);
         
-        // Check if it's a "fetch first" error
-        if (error.message.includes('fetch first') || error.message.includes('rejected')) {
-          throw new Error('Remote has changes not present locally. Enable "Force Push" to overwrite remote changes, or pull changes first.');
+        // Determine appropriate error type and status code
+        if (errorMsg.includes('fetch first') || errorMsg.includes('rejected') || errorMsg.includes('! [rejected]')) {
+          return res.status(409).json({
+            message: 'Remote has changes not present locally',
+            details: 'Enable "Force Push" to overwrite remote changes, or pull changes manually first.',
+            errorType: 'merge_required'
+          });
         }
         
-        throw new Error(`Git operation failed: ${error.message}`);
+        if (errorMsg.includes('Authentication failed') || errorMsg.includes('Invalid username or password') || errorMsg.includes('403')) {
+          return res.status(401).json({
+            message: 'GitHub authentication failed',
+            details: 'Please check your GitHub token has the required permissions (repo scope).',
+            errorType: 'auth_failed'
+          });
+        }
+        
+        if (errorMsg.includes('Could not resolve host') || errorMsg.includes('Failed to connect')) {
+          return res.status(503).json({
+            message: 'Network error',
+            details: 'Unable to connect to GitHub. Please check your internet connection.',
+            errorType: 'network_error'
+          });
+        }
+        
+        if (errorMsg.includes('Repository not found') || errorMsg.includes('404')) {
+          return res.status(404).json({
+            message: 'Repository not found',
+            details: 'The specified GitHub repository does not exist or you don\'t have access to it.',
+            errorType: 'repo_not_found'
+          });
+        }
+        
+        // Generic git error
+        throw new Error(`Git operation failed: ${errorMsg}`);
       }
     } catch (error: any) {
-      console.error('[GitHub Push] Error:', error);
+      // Log error securely (ensure no token leakage)
+      const safeErrorMsg = error.message ? error.message.replace(/ghp_[a-zA-Z0-9]+/g, '[REDACTED]') : 'Unknown error';
+      console.error('[GitHub Push] Error:', safeErrorMsg);
+      
+      // Return generic 500 for unhandled errors
       res.status(500).json({ 
-        message: error.message || 'Failed to push to GitHub',
-        details: 'Check server logs for more information'
+        message: safeErrorMsg || 'Failed to push to GitHub',
+        details: 'An unexpected error occurred. Check server logs for more information.',
+        errorType: 'unknown_error'
       });
     }
   });
