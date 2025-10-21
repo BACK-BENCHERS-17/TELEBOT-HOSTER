@@ -346,60 +346,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const askPassScript = path.join('/tmp', `git-askpass-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.sh`);
         const scriptContent = `#!/bin/sh\ncase "$1" in\n  Username*) echo "x-access-token" ;;\n  Password*) echo "${token.replace(/"/g, '\\"')}" ;;\n  *) echo "${token.replace(/"/g, '\\"')}" ;;\nesac`;
         
+        // Create askpass script with restrictive permissions (only readable/executable by owner)
+        await promisify(fs.writeFile)(askPassScript, scriptContent, { mode: 0o700 });
+        
         try {
-          // Create askpass script with restrictive permissions (only readable/executable by owner)
-          await promisify(fs.writeFile)(askPassScript, scriptContent, { mode: 0o700 });
-          
-          try {
-            await new Promise<void>((resolve, reject) => {
-              const pushArgs = forcePush 
-                ? ['push', trimmedRepoUrl, finalBranch, '--force']
-                : ['push', trimmedRepoUrl, finalBranch];
-                
-              const git = spawn('git', pushArgs, {
-                stdio: 'pipe',
-                env: {
-                  ...process.env,
-                  GIT_ASKPASS: askPassScript,
-                  GIT_TERMINAL_PROMPT: '0',
-                }
-              });
+          await new Promise<void>((resolve, reject) => {
+            const pushArgs = forcePush 
+              ? ['push', trimmedRepoUrl, finalBranch, '--force']
+              : ['push', trimmedRepoUrl, finalBranch];
               
-              let stdout = '';
-              let stderr = '';
-              
-              git.stdout?.on('data', (data) => {
-                stdout += data.toString();
-              });
-              
-              git.stderr?.on('data', (data) => {
-                stderr += data.toString();
-              });
-              
-              git.on('error', (err) => {
-                reject(new Error(`Failed to execute git push: ${err.message}`));
-              });
-              
-              git.on('close', (code) => {
-                if (code === 0) {
-                  resolve();
-                } else {
-                  // Sanitize error message to remove any token traces
-                  const sanitizedError = stderr.replace(new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '[REDACTED]');
-                  reject(new Error(sanitizedError || stdout || `Push failed with exit code ${code}`));
-                }
-              });
+            const git = spawn('git', pushArgs, {
+              stdio: 'pipe',
+              env: {
+                ...process.env,
+                GIT_ASKPASS: askPassScript,
+                GIT_TERMINAL_PROMPT: '0',
+              }
             });
-          } finally {
-            // Always clean up askpass script, even if push fails
-            try {
-              await unlinkAsync(askPassScript);
-            } catch (cleanupErr) {
-              console.error('[GitHub Push] Warning: Failed to clean up askpass script:', cleanupErr);
-            }
+            
+            let stdout = '';
+            let stderr = '';
+            
+            git.stdout?.on('data', (data) => {
+              stdout += data.toString();
+            });
+            
+            git.stderr?.on('data', (data) => {
+              stderr += data.toString();
+            });
+            
+            git.on('error', (err) => {
+              reject(new Error(`Failed to execute git push: ${err.message}`));
+            });
+            
+            git.on('close', (code) => {
+              if (code === 0) {
+                resolve();
+              } else {
+                // Sanitize error message to remove any token traces
+                const sanitizedError = stderr.replace(new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '[REDACTED]');
+                reject(new Error(sanitizedError || stdout || `Push failed with exit code ${code}`));
+              }
+            });
+          });
+        } finally {
+          // Always clean up askpass script, even if push fails
+          try {
+            await unlinkAsync(askPassScript);
+          } catch (cleanupErr) {
+            console.error('[GitHub Push] Warning: Failed to clean up askpass script:', cleanupErr);
           }
-        } catch (scriptErr) {
-          throw new Error(`Failed to create credential helper: ${scriptErr instanceof Error ? scriptErr.message : 'Unknown error'}`);
         }
 
         console.log('[GitHub Push] Successfully pushed to GitHub');
