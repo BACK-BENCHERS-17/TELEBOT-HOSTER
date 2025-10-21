@@ -1325,6 +1325,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Bot not found" });
       }
       
+      // Ensure bot files exist (restore from GridFS if needed)
+      await ensureBotFilesExist(bot);
+      
       const { packageName } = req.body;
       
       if (!packageName) {
@@ -1397,6 +1400,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Bot not found" });
       }
       
+      // Ensure bot files exist (restore from GridFS if needed)
+      await ensureBotFilesExist(bot);
+      
       const botDirectory = bot.extractedPath!;
       const packages: string[] = [];
       
@@ -1433,6 +1439,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!bot || bot.userId !== req.user.id) {
         return res.status(404).json({ message: "Bot not found" });
       }
+      
+      // Ensure bot files exist (restore from GridFS if needed)
+      await ensureBotFilesExist(bot);
       
       const packageName = req.params.packageName;
       const botDirectory = bot.extractedPath!;
@@ -1476,6 +1485,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!bot || bot.userId !== req.user.id) {
         return res.status(404).json({ message: "Bot not found" });
       }
+      
+      // Ensure bot files exist (restore from GridFS if needed)
+      await ensureBotFilesExist(bot);
       
       const dirPath = req.query.path as string || '';
       const fullPath = path.join(bot.extractedPath!, dirPath);
@@ -1521,6 +1533,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Bot not found" });
       }
       
+      // Ensure bot files exist (restore from GridFS if needed)
+      await ensureBotFilesExist(bot);
+      
       const filePath = req.query.path as string;
       if (!filePath) {
         return res.status(400).json({ message: "File path is required" });
@@ -1557,6 +1572,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!bot || bot.userId !== req.user.id) {
         return res.status(404).json({ message: "Bot not found" });
       }
+      
+      // Ensure bot files exist (restore from GridFS if needed)
+      await ensureBotFilesExist(bot);
       
       const { path: filePath, content, type } = req.body;
       
@@ -1602,6 +1620,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Bot not found" });
       }
       
+      // Ensure bot files exist (restore from GridFS if needed)
+      await ensureBotFilesExist(bot);
+      
       const filePath = req.query.path as string;
       
       if (!filePath) {
@@ -1645,6 +1666,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!bot || bot.userId !== req.user.id) {
         return res.status(404).json({ message: "Bot not found" });
       }
+      
+      // Ensure bot files exist (restore from GridFS if needed)
+      await ensureBotFilesExist(bot);
       
       const { oldPath, newPath } = req.body;
       
@@ -1760,21 +1784,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   return httpServer;
 }
 
-// Shared function to launch a bot
-async function launchBot(botId: number) {
-  const bot = await storage.getBotById(botId);
-  
-  if (!bot) {
-    throw new Error("Bot not found");
-  }
-  
-  if (bot.status === 'running') {
-    throw new Error("Bot is already running");
-  }
-  
-  // Validate that bot files exist
+// Helper function to ensure bot files are restored from GridFS if needed
+async function ensureBotFilesExist(bot: any) {
   if (!bot.extractedPath) {
-    throw new Error("Bot files have not been uploaded. Please upload bot files before launching.");
+    throw new Error("Bot files have not been uploaded. Please upload bot files first.");
   }
   
   // Check if bot files exist on filesystem
@@ -1788,11 +1801,11 @@ async function launchBot(botId: number) {
   
   // If files don't exist but we have GridFS ID, restore from GridFS
   if (!filesExist && bot.gridfsFileId) {
-    console.log(`[Bot ${botId}] Files not found on filesystem, restoring from GridFS...`);
+    console.log(`[Bot ${bot.id}] Files not found on filesystem, restoring from GridFS...`);
     
     try {
       // Create temp directory for ZIP
-      const tempZipPath = path.join('uploads', `temp_${botId}_${Date.now()}.zip`);
+      const tempZipPath = path.join('uploads', `temp_${bot.id}_${Date.now()}.zip`);
       await mkdirAsync('uploads', { recursive: true });
       
       // Download ZIP from GridFS
@@ -1806,7 +1819,7 @@ async function launchBot(botId: number) {
         gridfsStream.on('error', reject);
       });
       
-      console.log(`[Bot ${botId}] Downloaded ZIP from GridFS to ${tempZipPath}`);
+      console.log(`[Bot ${bot.id}] Downloaded ZIP from GridFS to ${tempZipPath}`);
       
       // Extract ZIP to extractedPath
       await mkdirAsync(bot.extractedPath, { recursive: true });
@@ -1814,19 +1827,35 @@ async function launchBot(botId: number) {
         .pipe(unzipper.Extract({ path: bot.extractedPath }))
         .promise();
       
-      console.log(`[Bot ${botId}] Extracted ZIP to ${bot.extractedPath}`);
+      console.log(`[Bot ${bot.id}] Extracted ZIP to ${bot.extractedPath}`);
       
       // Clean up temp ZIP
       await unlinkAsync(tempZipPath);
       
-      console.log(`✅ Bot ${botId} files restored from GridFS`);
+      console.log(`✅ Bot ${bot.id} files restored from GridFS`);
     } catch (error: any) {
-      console.error(`[Bot ${botId}] Failed to restore files from GridFS:`, error);
+      console.error(`[Bot ${bot.id}] Failed to restore files from GridFS:`, error);
       throw new Error(`Failed to restore bot files from database: ${error.message}`);
     }
   } else if (!filesExist) {
     throw new Error(`Bot files not found. Please re-upload the bot.`);
   }
+}
+
+// Shared function to launch a bot
+async function launchBot(botId: number) {
+  const bot = await storage.getBotById(botId);
+  
+  if (!bot) {
+    throw new Error("Bot not found");
+  }
+  
+  if (bot.status === 'running') {
+    throw new Error("Bot is already running");
+  }
+  
+  // Ensure bot files exist (restore from GridFS if needed)
+  await ensureBotFilesExist(bot);
   
   // Get environment variables
   const envVars = await storage.getEnvVarsByBotId(botId);
