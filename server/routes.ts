@@ -48,6 +48,16 @@ function findSystemPython(): string {
   return 'python3';
 }
 
+// Check if uv is available on the system
+function isUvAvailable(): boolean {
+  try {
+    execSync('which uv', { encoding: 'utf-8', stdio: 'pipe' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // File upload configuration
 const upload = multer({
   dest: 'uploads/',
@@ -187,14 +197,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         '.git',
         '.cache',
         'dist',
-        'uploads/bots',
         'logs',
         '.env',
         '.replit',
         '.upm',
         '*.log',
         '.DS_Store',
-        'Thumbs.db'
+        'Thumbs.db',
+        'uploads/*.zip',
+        'uploads/*.tar.gz'
       ];
 
       // Add all files except excluded ones
@@ -592,7 +603,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const hasPyproject = files.some(f => f.toLowerCase() === 'pyproject.toml');
           const hasRequirements = files.some(f => f.toLowerCase() === 'requirements.txt');
           
-          let useUv = hasUvLock || (hasPyproject && !hasRequirements);
+          // Only use uv if it's available AND we have uv-specific files
+          const uvAvailable = isUvAvailable();
+          let useUv = uvAvailable && (hasUvLock || (hasPyproject && !hasRequirements));
+          
+          if (!uvAvailable && hasUvLock) {
+            console.log(`[Bot Deploy] Warning: uv.lock found but uv is not installed. Falling back to pip with requirements.txt`);
+          }
           
           if (useUv) {
             // Use uv to install dependencies
@@ -624,7 +641,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               
               installer.on('close', (code: number | null) => {
                 if (code === 0) {
-                  console.log(`✓ Installed Python dependencies for ${name}`);
+                  console.log(`✓ Installed Python dependencies using uv for ${name}`);
                   resolve();
                 } else {
                   const errorMsg = stderrData || stdoutData || `Unknown error (exit code: ${code})`;

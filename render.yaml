@@ -3,8 +3,18 @@ services:
     name: telebot-hoster
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build
-    startCommand: npm start
+    buildCommand: |
+      # Install uv for Python package management (required for bots using uv.lock)
+      curl -LsSf https://astral.sh/uv/install.sh | sh
+      export PATH="$HOME/.local/bin:$PATH"
+      # Verify uv installation
+      which uv || echo "uv installation pending (will be available at runtime)"
+      # Install Node.js dependencies and build
+      npm install && npm run build
+    startCommand: |
+      # Ensure uv is in PATH for runtime
+      export PATH="$HOME/.local/bin:$PATH"
+      npm start
     envVars:
       - key: NODE_ENV
         value: production
@@ -24,5 +34,5 @@ services:
       - key: DEVELOPER_CONTACT
         value: t.me/your_username
     autoDeploy: true
-    # Note: Python 3 is pre-installed on all Render environments
-    # No additional configuration needed for Python bot support
+    # Python 3 and uv package manager are installed for bot support
+    # Bots can use either pip (requirements.txt) or uv (uv.lock/pyproject.toml)

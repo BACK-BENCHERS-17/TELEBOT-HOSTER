@@ -2,6 +2,19 @@
 
 This guide will help you deploy TELEBOT HOSTER to Render.com.
 
+## ⚠️ IMPORTANT: Bot File Persistence
+
+**Bot files will NOT persist across Render restarts or redeployments** because uploaded files are stored in the ephemeral file system.
+
+**Solutions:**
+- **Download regularly**: Use the admin panel to download the full project (includes all bot files)
+- **Re-upload after restart**: Manually re-upload bots after Render spins down (free tier)
+- **For production**: Consider using database storage or Render Persistent Disks (paid)
+
+📖 **Read the full guide**: [RENDER_BOT_PERSISTENCE.md](RENDER_BOT_PERSISTENCE.md) for detailed information and solutions.
+
+---
+
 ## Prerequisites
 
 1. A Render account (free tier available at [render.com](https://render.com))
