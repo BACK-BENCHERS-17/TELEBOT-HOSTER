@@ -90,6 +90,7 @@ export const bots = pgTable("bots", {
   containerId: varchar("container_id"), // Docker container ID (for future use)
   processId: varchar("process_id"), // Process ID for running bot
   errorMessage: text("error_message"), // Last error message if any
+  gridfsFileId: text("gridfs_file_id"), // MongoDB GridFS file ID for ZIP file persistence
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

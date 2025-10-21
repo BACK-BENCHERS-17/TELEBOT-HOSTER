@@ -308,6 +308,7 @@ export class MongoStorage implements IStorage {
       containerId: rest.containerId || null,
       processId: rest.processId || null,
       errorMessage: rest.errorMessage || null,
+      gridfsFileId: rest.gridfsFileId?.toString() || null,
       createdAt: rest.createdAt || null,
       updatedAt: rest.updatedAt || null,
     };

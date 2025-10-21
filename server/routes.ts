@@ -1003,6 +1003,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Save ZIP file to GridFS for persistence across restarts
+      let gridfsFileId: string | undefined;
+      try {
+        console.log(`[Bot Deploy] Saving ZIP file to MongoDB GridFS...`);
+        const zipStream = fs.createReadStream(zipPath);
+        gridfsFileId = await storage.saveBotFile(`${name}_${Date.now()}.zip`, zipStream);
+        console.log(`✅ Bot ZIP saved to GridFS with ID: ${gridfsFileId}`);
+      } catch (error: any) {
+        console.error(`[Bot Deploy] Failed to save ZIP to GridFS:`, error);
+        await unlinkAsync(zipPath);
+        await promisify(fs.rm)(extractPath, { recursive: true, force: true });
+        return res.status(500).json({ 
+          message: `Failed to save bot files: ${error.message}` 
+        });
+      }
+      
       // Create bot record
       const bot = await storage.createBot({
         userId,
@@ -1013,6 +1029,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         extractedPath: botDirectory, // Directory where dependencies are installed
         entryPoint: entryPointPath, // Relative path to entry file from botDirectory
       });
+      
+      // Update bot with GridFS file ID
+      await storage.updateBot(bot.id, { gridfsFileId });
       
       // Create environment variables with validation
       for (const envVar of envVars) {
