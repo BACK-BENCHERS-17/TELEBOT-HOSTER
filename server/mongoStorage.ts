@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import type { Readable } from 'stream';
 import type {
   User,
   UpsertUser,
@@ -37,6 +38,7 @@ const BotSchema = new mongoose.Schema({
   containerId: String,
   processId: String,
   errorMessage: String,
+  gridfsFileId: { type: mongoose.Schema.Types.ObjectId },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 });
@@ -70,6 +72,7 @@ export class MongoStorage implements IStorage {
   private botIdCounter = 0;
   private tokenIdCounter = 0;
   private envVarIdCounter = 0;
+  private gridFsBucket: any = null;
 
   async connect() {
     if (this.connected) return;
@@ -84,6 +87,15 @@ export class MongoStorage implements IStorage {
       await mongoose.connect(mongoUrl);
       this.connected = true;
       console.log('✅ Connected to MongoDB successfully');
+      
+      if (!mongoose.connection.db) {
+        throw new Error('MongoDB connection database is not available');
+      }
+      
+      this.gridFsBucket = new mongoose.mongo.GridFSBucket(mongoose.connection.db, {
+        bucketName: 'botFiles'
+      });
+      console.log('✅ GridFS bucket initialized for bot file storage');
       
       // Migrate legacy documents without numericId
       console.log('🔄 Checking for legacy documents...');
@@ -366,5 +378,63 @@ export class MongoStorage implements IStorage {
   async deleteEnvVar(id: number): Promise<void> {
     await this.connect();
     await EnvironmentVariableModel.findOneAndDelete({ numericId: id });
+  }
+
+  async saveBotFile(filename: string, fileStream: Readable): Promise<string> {
+    await this.connect();
+    if (!this.gridFsBucket) {
+      throw new Error('GridFS bucket not initialized');
+    }
+
+    return new Promise((resolve, reject) => {
+      const uploadStream = this.gridFsBucket.openUploadStream(filename, {
+        metadata: { uploadedAt: new Date() }
+      });
+      
+      fileStream.pipe(uploadStream);
+      
+      uploadStream.on('finish', () => {
+        resolve(uploadStream.id.toString());
+      });
+      
+      uploadStream.on('error', (error: Error) => {
+        reject(error);
+      });
+    });
+  }
+
+  async getBotFile(fileId: string): Promise<Readable> {
+    await this.connect();
+    if (!this.gridFsBucket) {
+      throw new Error('GridFS bucket not initialized');
+    }
+
+    const objectId = new mongoose.Types.ObjectId(fileId);
+    return this.gridFsBucket.openDownloadStream(objectId);
+  }
+
+  async deleteBotFile(fileId: string): Promise<void> {
+    await this.connect();
+    if (!this.gridFsBucket) {
+      throw new Error('GridFS bucket not initialized');
+    }
+
+    const objectId = new mongoose.Types.ObjectId(fileId);
+    await this.gridFsBucket.delete(objectId);
+  }
+
+  async getAllBotFiles(): Promise<Array<{ id: string, filename: string, length: number, uploadDate: Date }>> {
+    await this.connect();
+    if (!this.gridFsBucket) {
+      throw new Error('GridFS bucket not initialized');
+    }
+
+    const files = await this.gridFsBucket.find({}).toArray();
+    return files.map((file: any) => ({
+      id: file._id.toString(),
+      filename: file.filename,
+      length: file.length,
+      uploadDate: file.uploadDate
+    }));
   }
 }
