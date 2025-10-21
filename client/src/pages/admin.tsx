@@ -39,6 +39,7 @@ export default function AdminPanel() {
   const [githubBranch, setGithubBranch] = useState("main");
   const [githubToken, setGithubToken] = useState("");
   const [githubCommitMessage, setGithubCommitMessage] = useState("");
+  const [githubForcePush, setGithubForcePush] = useState(false);
 
   const { data: adminCheck } = useQuery<{ isAdmin: boolean }>({
     queryKey: ["/api/auth/admin-check"],
@@ -226,6 +227,7 @@ export default function AdminPanel() {
       branch: string; 
       token: string;
       commitMessage: string;
+      forcePush: boolean;
     }) => {
       const res = await apiRequest("POST", "/api/admin/github-push", data);
       return res.json();
@@ -235,6 +237,8 @@ export default function AdminPanel() {
         title: "Successfully pushed to GitHub",
         description: data.hasChanges ? `Pushed to ${data.branch}` : "No changes to commit"
       });
+      setGithubToken("");
+      setGithubForcePush(false);
     },
     onError: (error: any) => {
       toast({ 
@@ -706,6 +710,23 @@ export default function AdminPanel() {
                   </p>
                 </div>
 
+                <div className="flex items-center space-x-2 p-3 border rounded-lg bg-muted/50">
+                  <Switch
+                    id="github-force-push"
+                    checked={githubForcePush}
+                    onCheckedChange={setGithubForcePush}
+                    data-testid="switch-github-force-push"
+                  />
+                  <div className="flex-1">
+                    <Label htmlFor="github-force-push" className="cursor-pointer font-medium">
+                      Force Push
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Overwrite remote changes. Use with caution!
+                    </p>
+                  </div>
+                </div>
+
                 <div className="flex gap-2">
                   <Button
                     onClick={() => {
@@ -721,7 +742,8 @@ export default function AdminPanel() {
                         repoUrl: githubRepoUrl,
                         branch: githubBranch || "main",
                         token: githubToken,
-                        commitMessage: githubCommitMessage
+                        commitMessage: githubCommitMessage,
+                        forcePush: githubForcePush
                       });
                     }}
                     disabled={githubPushMutation.isPending}

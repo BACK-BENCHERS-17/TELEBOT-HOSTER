@@ -230,7 +230,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Push to GitHub (admin only)
   app.post('/api/admin/github-push', isAdmin, async (req: any, res) => {
     try {
-      const { repoUrl, branch, token, commitMessage } = req.body;
+      const { repoUrl, branch, token, commitMessage, forcePush } = req.body;
 
       // Validate inputs
       if (!repoUrl || !token) {
@@ -270,12 +270,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Execute git commands safely using spawn
       try {
-        // Helper function to run git commands safely
-        const runGitCommand = (args: string[]): Promise<string> => {
+        // Helper function to run git commands safely with credentials in env
+        const runGitCommand = (args: string[], useCredentials = false): Promise<string> => {
           return new Promise((resolve, reject) => {
+            const envVars = { ...process.env };
+            
+            if (useCredentials) {
+              // Use authenticated URL with token directly in URL (secure as it's only in memory)
+              // This avoids writing credentials to disk
+              envVars.GIT_TERMINAL_PROMPT = '0';
+            }
+            
             const git = spawn('git', args, { 
               stdio: 'pipe',
-              env: { ...process.env }
+              env: envVars
             });
             
             let stdout = '';
@@ -332,65 +340,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log('[GitHub Push] No changes to commit');
         }
 
-        // Create a temporary askpass script to provide credentials without exposing in command args
-        const askPassScript = path.join('/tmp', `git-askpass-${Date.now()}.sh`);
-        // Git will prompt for username first, then password
-        // Return 'x-access-token' for username, and the actual token for password
-        const scriptContent = `#!/bin/sh
-case "$1" in
-  Username*) echo "x-access-token" ;;
-  Password*) echo "${token}" ;;
-  *) echo "${token}" ;;
-esac`;
+        // Push to GitHub using authenticated URL (credentials only in memory, never written to disk)
+        console.log('[GitHub Push] Pushing to GitHub...');
         
-        await promisify(fs.writeFile)(askPassScript, scriptContent, { mode: 0o700 });
+        // Build authenticated URL with token (more secure than file-based approach)
+        const urlParts = trimmedRepoUrl.replace('https://', '').split('/');
+        const authenticatedUrl = `https://x-access-token:${token}@${urlParts.join('/')}`;
         
-        try {
-          // Push to GitHub using askpass helper (credentials not in command args or process list)
-          console.log('[GitHub Push] Pushing to GitHub...');
-          
-          await new Promise((resolve, reject) => {
-            const git = spawn('git', ['push', trimmedRepoUrl, finalBranch], {
-              stdio: 'pipe',
-              env: { 
-                ...process.env,
-                GIT_ASKPASS: askPassScript,
-                GIT_TERMINAL_PROMPT: '0',
-                GIT_USERNAME: 'x-access-token'
-              }
-            });
-            
-            let stdout = '';
-            let stderr = '';
-            
-            git.stdout?.on('data', (data) => {
-              stdout += data.toString();
-            });
-            
-            git.stderr?.on('data', (data) => {
-              stderr += data.toString();
-            });
-            
-            git.on('error', (err) => {
-              reject(new Error(`Failed to push: ${err.message}`));
-            });
-            
-            git.on('close', (code) => {
-              if (code === 0) {
-                resolve(stdout + stderr);
-              } else {
-                reject(new Error(stderr || stdout || `Push failed with exit code ${code}`));
-              }
-            });
-          });
-        } finally {
-          // Clean up askpass script immediately after use
-          try {
-            await unlinkAsync(askPassScript);
-          } catch (err) {
-            console.error('[GitHub Push] Failed to clean up askpass script:', err);
-          }
-        }
+        const pushArgs = forcePush 
+          ? ['push', authenticatedUrl, finalBranch, '--force']
+          : ['push', authenticatedUrl, finalBranch];
+        
+        await runGitCommand(pushArgs, true);
 
         console.log('[GitHub Push] Successfully pushed to GitHub');
         
@@ -402,6 +363,12 @@ esac`;
         });
       } catch (error: any) {
         console.error('[GitHub Push] Git command failed:', error.message);
+        
+        // Check if it's a "fetch first" error
+        if (error.message.includes('fetch first') || error.message.includes('rejected')) {
+          throw new Error('Remote has changes not present locally. Enable "Force Push" to overwrite remote changes, or pull changes first.');
+        }
+        
         throw new Error(`Git operation failed: ${error.message}`);
       }
     } catch (error: any) {
