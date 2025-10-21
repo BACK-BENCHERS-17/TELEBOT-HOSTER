@@ -330,7 +330,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Create a temporary askpass script to provide credentials without exposing in command args
         const askPassScript = path.join('/tmp', `git-askpass-${Date.now()}.sh`);
-        const scriptContent = `#!/bin/sh\necho "${token}"`;
+        // Git will prompt for username first, then password
+        // Return 'x-access-token' for username, and the actual token for password
+        const scriptContent = `#!/bin/sh
+case "$1" in
+  Username*) echo "x-access-token" ;;
+  Password*) echo "${token}" ;;
+  *) echo "${token}" ;;
+esac`;
         
         await promisify(fs.writeFile)(askPassScript, scriptContent, { mode: 0o700 });
         
