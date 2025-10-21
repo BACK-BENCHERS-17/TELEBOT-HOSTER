@@ -40,16 +40,16 @@ export default function AdminPanel() {
   const [githubToken, setGithubToken] = useState("");
   const [githubCommitMessage, setGithubCommitMessage] = useState("");
 
-  const { data: adminCheck } = useQuery({
+  const { data: adminCheck } = useQuery<{ isAdmin: boolean }>({
     queryKey: ["/api/auth/admin-check"],
   });
 
-  const { data: users, refetch: refetchUsers } = useQuery({
+  const { data: users, refetch: refetchUsers } = useQuery<any[]>({
     queryKey: ["/api/admin/users"],
     enabled: adminCheck?.isAdmin || isLoggedIn,
   });
 
-  const { data: tokens, refetch: refetchTokens } = useQuery({
+  const { data: tokens, refetch: refetchTokens } = useQuery<any[]>({
     queryKey: ["/api/admin/tokens"],
     enabled: adminCheck?.isAdmin || isLoggedIn,
   });
