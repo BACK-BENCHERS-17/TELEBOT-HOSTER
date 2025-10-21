@@ -257,10 +257,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const finalMessage = (commitMessage || `Update from admin panel - ${new Date().toISOString()}`).trim();
+      const defaultMessage = `Update from admin panel - ${new Date().toISOString()}`;
+      const finalMessage = (commitMessage || defaultMessage).trim();
       
       // Sanitize commit message - remove quotes and special chars that could break git
-      const sanitizedMessage = finalMessage.replace(/["'`\\$]/g, '');
+      const sanitizedMessage = finalMessage.replace(/["'`\\$]/g, '').trim();
+      
+      // Fall back to default message if sanitization removed everything
+      const commitMsg = sanitizedMessage.length > 0 ? sanitizedMessage : defaultMessage;
 
       console.log('[GitHub Push] Starting push process...');
       
@@ -323,7 +327,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (hasChanges) {
           // Commit changes
           console.log('[GitHub Push] Committing changes...');
-          await runGitCommand(['commit', '-m', sanitizedMessage]);
+          await runGitCommand(['commit', '-m', commitMsg]);
         } else {
           console.log('[GitHub Push] No changes to commit');
         }
