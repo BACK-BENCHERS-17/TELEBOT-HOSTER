@@ -166,12 +166,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         console.log(`[Token Creation] New user created: ${email} (ID: ${user.id})`);
       } else {
-        // Update user's name if they already exist
+        // User already exists - check if they have an active token
+        const tokens = await storage.getTokensByUserId(user.id);
+        const activeToken = tokens.find(t => t.isActive === 'true');
+        
+        if (activeToken) {
+          console.log(`[Token Creation] Returning existing active token for ${email}`);
+          return res.json({ 
+            token: activeToken.token,
+            message: "Account already exists. Your existing token has been retrieved."
+          });
+        }
+        
+        // Update user's name if they already exist but have no active token
         await storage.updateUser(user.id, { firstName, lastName });
-        console.log(`[Token Creation] Existing user found and updated: ${email} (ID: ${user.id})`);
+        console.log(`[Token Creation] Existing user found (no active token), updating: ${email} (ID: ${user.id})`);
       }
 
-      // Generate a unique token
+      // Generate a unique token (only for new users or existing users without active tokens)
       const randomPart = nanoid(8).toUpperCase();
       const token = `BACK-${randomPart}`;
       
