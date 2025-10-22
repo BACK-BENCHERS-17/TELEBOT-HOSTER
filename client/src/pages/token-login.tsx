@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Key, ArrowLeft } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Footer } from "@/components/Footer";
 
 export default function TokenLogin() {
   const { toast } = useToast();
@@ -99,6 +100,7 @@ export default function TokenLogin() {
           </form>
         </CardContent>
       </Card>
+      <Footer />
     </div>
   );
 }

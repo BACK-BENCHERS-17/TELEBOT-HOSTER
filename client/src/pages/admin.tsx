@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Shield, Users, Key, Copy, Trash2, Plus, LogOut, Edit, Download, Upload, Github, Search } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useLocation } from "wouter";
+import { Footer } from "@/components/Footer";
 
 export default function AdminPanel() {
   const { toast } = useToast();
@@ -870,6 +871,7 @@ export default function AdminPanel() {
           </TabsContent>
         </Tabs>
       </main>
+      <Footer />
     </div>
   );
 }

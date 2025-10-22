@@ -54,6 +54,7 @@ import type { Bot as BotType, EnvironmentVariable } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Footer } from "@/components/Footer";
 
 interface FileItem {
   name: string;
@@ -1011,6 +1012,8 @@ export default function BotManagement() {
           </TabsContent>
         </Tabs>
       </main>
+
+      <Footer />
 
       <Dialog open={bot.status === 'installing'}>
         <DialogContent className="sm:max-w-md" data-testid="dialog-installing">

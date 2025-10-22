@@ -29,6 +29,7 @@ import { Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Footer } from "@/components/Footer";
 
 export default function Landing() {
   const { toast } = useToast();
@@ -598,12 +599,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t py-8 px-4">
-        <div className="container mx-auto max-w-7xl text-center text-sm text-muted-foreground">
-          <p>© 2024 TELEBOT HOSTER. Built for developers who ship fast.</p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

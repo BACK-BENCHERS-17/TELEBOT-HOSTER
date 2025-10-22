@@ -20,6 +20,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import type { User } from "@shared/schema";
+import { Footer } from "@/components/Footer";
 
 export default function Profile() {
   const { toast } = useToast();
@@ -257,6 +258,7 @@ export default function Profile() {
           </Card>
         </div>
       </main>
+      <Footer />
     </div>
   );
 }

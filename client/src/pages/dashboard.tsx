@@ -33,6 +33,7 @@ import { DeployBotDialog } from "@/components/DeployBotDialog";
 import type { Bot as BotType } from "@shared/schema";
 import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Footer } from "@/components/Footer";
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -329,6 +330,7 @@ export default function Dashboard() {
         )}
       </main>
 
+      <Footer />
       <DeployBotDialog open={deployDialogOpen} onOpenChange={setDeployDialogOpen} />
     </div>
   );
