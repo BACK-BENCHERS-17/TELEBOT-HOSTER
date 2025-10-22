@@ -131,6 +131,22 @@ async function autoInstallPackage(botId: number, packageName: string, bot: any):
         console.log(`[Bot ${botId}] ✓ Added '${packageName}' to requirements.txt`);
       }
       
+      // Create virtual environment if needed
+      const venvPath = path.join(botDirectory, '.venv');
+      if (!fs.existsSync(venvPath)) {
+        console.log(`[Bot ${botId}] Creating virtual environment...`);
+        try {
+          execSync(`python3 -m venv "${venvPath}"`, { 
+            cwd: botDirectory,
+            stdio: 'pipe'
+          });
+          console.log(`[Bot ${botId}] ✓ Virtual environment created`);
+        } catch (error: any) {
+          console.error(`[Bot ${botId}] Failed to create venv:`, error.message);
+          return false;
+        }
+      }
+      
       // Install the package
       await new Promise<void>((resolve, reject) => {
         const venvPython = path.join(botDirectory, '.venv', 'bin', 'python');
