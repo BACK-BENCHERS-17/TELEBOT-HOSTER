@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Shield, Users, Key, Copy, Trash2, Plus, LogOut, Edit, Download, Upload, Github } from "lucide-react";
+import { Shield, Users, Key, Copy, Trash2, Plus, LogOut, Edit, Download, Upload, Github, Search } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useLocation } from "wouter";
 
@@ -20,6 +20,9 @@ export default function AdminPanel() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  
+  const [userSearch, setUserSearch] = useState("");
+  const [tokenSearch, setTokenSearch] = useState("");
 
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserFirstName, setNewUserFirstName] = useState("");
@@ -222,6 +225,34 @@ export default function AdminPanel() {
     navigator.clipboard.writeText(text);
     toast({ title: "Copied to clipboard" });
   };
+
+  // Filter users based on search
+  const filteredUsers = useMemo(() => {
+    if (!users) return [];
+    if (!userSearch.trim()) return users;
+    
+    const searchLower = userSearch.toLowerCase();
+    return users.filter((user: any) => 
+      user.email?.toLowerCase().includes(searchLower) ||
+      user.firstName?.toLowerCase().includes(searchLower) ||
+      user.lastName?.toLowerCase().includes(searchLower) ||
+      `${user.firstName} ${user.lastName}`.toLowerCase().includes(searchLower)
+    );
+  }, [users, userSearch]);
+
+  // Filter tokens based on search
+  const filteredTokens = useMemo(() => {
+    if (!tokens) return [];
+    if (!tokenSearch.trim()) return tokens;
+    
+    const searchLower = tokenSearch.toLowerCase();
+    return tokens.filter((token: any) => 
+      token.token?.toLowerCase().includes(searchLower) ||
+      token.user?.email?.toLowerCase().includes(searchLower) ||
+      token.user?.firstName?.toLowerCase().includes(searchLower) ||
+      token.user?.lastName?.toLowerCase().includes(searchLower)
+    );
+  }, [tokens, tokenSearch]);
 
   const handleDownloadProject = () => {
     setIsDownloading(true);
@@ -460,12 +491,34 @@ export default function AdminPanel() {
 
             <Card>
               <CardHeader>
-                <CardTitle>All Users</CardTitle>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <CardTitle>All Users</CardTitle>
+                    <CardDescription className="mt-1">
+                      {filteredUsers?.length || 0} user{filteredUsers?.length !== 1 ? 's' : ''} found
+                    </CardDescription>
+                  </div>
+                  <div className="relative w-full max-w-sm">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by name, email..."
+                      value={userSearch}
+                      onChange={(e) => setUserSearch(e.target.value)}
+                      className="pl-9"
+                      data-testid="input-search-users"
+                    />
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {users?.map((user: any) => (
-                    <div
+                  {filteredUsers?.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No users found matching your search
+                    </div>
+                  ) : (
+                    filteredUsers?.map((user: any) => (
+                      <div
                       key={user.id}
                       className="p-4 rounded-lg border space-y-3"
                       data-testid={`user-${user.id}`}
@@ -594,7 +647,8 @@ export default function AdminPanel() {
                         </>
                       )}
                     </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -603,12 +657,34 @@ export default function AdminPanel() {
           <TabsContent value="tokens" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Access Tokens</CardTitle>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <CardTitle>Access Tokens</CardTitle>
+                    <CardDescription className="mt-1">
+                      {filteredTokens?.length || 0} token{filteredTokens?.length !== 1 ? 's' : ''} found
+                    </CardDescription>
+                  </div>
+                  <div className="relative w-full max-w-sm">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by token, user..."
+                      value={tokenSearch}
+                      onChange={(e) => setTokenSearch(e.target.value)}
+                      className="pl-9"
+                      data-testid="input-search-tokens"
+                    />
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {tokens?.map((tokenData: any) => (
-                    <div
+                  {filteredTokens?.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No tokens found matching your search
+                    </div>
+                  ) : (
+                    filteredTokens?.map((tokenData: any) => (
+                      <div
                       key={tokenData.id}
                       className="flex items-center justify-between p-4 rounded-lg border"
                       data-testid={`token-${tokenData.id}`}
@@ -658,11 +734,7 @@ export default function AdminPanel() {
                         </Button>
                       </div>
                     </div>
-                  ))}
-                  {!tokens || tokens.length === 0 && (
-                    <p className="text-center text-muted-foreground py-8">
-                      No tokens found. Create a user first, then generate a token for them.
-                    </p>
+                    ))
                   )}
                 </div>
               </CardContent>

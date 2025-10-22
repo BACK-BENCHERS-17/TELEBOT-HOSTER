@@ -33,16 +33,23 @@ import { useToast } from "@/hooks/use-toast";
 export default function Landing() {
   const { toast } = useToast();
   const [email, setEmail] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [forgotDialogOpen, setForgotDialogOpen] = useState(false);
+  const [lookupEmail, setLookupEmail] = useState("");
+  const [lookupFirstName, setLookupFirstName] = useState("");
+  const [lookupLastName, setLookupLastName] = useState("");
+  const [foundToken, setFoundToken] = useState<string | null>(null);
 
   const { data: contactInfo } = useQuery<{ contact: string }>({
     queryKey: ["/api/auth/contact-info"],
   });
 
   const createTokenMutation = useMutation({
-    mutationFn: async (userEmail: string) => {
-      const res = await apiRequest("POST", "/api/public/create-token", { email: userEmail });
+    mutationFn: async (userData: { email: string; firstName: string; lastName: string }) => {
+      const res = await apiRequest("POST", "/api/public/create-token", userData);
       return res.json();
     },
     onSuccess: (data) => {
@@ -61,17 +68,59 @@ export default function Landing() {
     },
   });
 
+  const lookupTokenMutation = useMutation({
+    mutationFn: async (lookupData: { email: string; firstName: string; lastName: string }) => {
+      const res = await apiRequest("POST", "/api/public/lookup-token", lookupData);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setFoundToken(data.token);
+      toast({
+        title: "Token found!",
+        description: "Your access token has been retrieved.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Token not found",
+        description: error.message || "Please check your details and try again",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleCreateToken = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) {
+    if (!email.trim() || !firstName.trim() || !lastName.trim()) {
       toast({
-        title: "Email required",
-        description: "Please enter your email address",
+        title: "All fields required",
+        description: "Please enter your email, first name, and last name",
         variant: "destructive",
       });
       return;
     }
-    createTokenMutation.mutate(email.trim());
+    createTokenMutation.mutate({ 
+      email: email.trim(), 
+      firstName: firstName.trim(), 
+      lastName: lastName.trim() 
+    });
+  };
+
+  const handleLookupToken = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!lookupEmail.trim() || !lookupFirstName.trim() || !lookupLastName.trim()) {
+      toast({
+        title: "All fields required",
+        description: "Please enter your email, first name, and last name",
+        variant: "destructive",
+      });
+      return;
+    }
+    lookupTokenMutation.mutate({
+      email: lookupEmail.trim(),
+      firstName: lookupFirstName.trim(),
+      lastName: lookupLastName.trim()
+    });
   };
 
   const handleDialogChange = (open: boolean) => {
@@ -79,8 +128,22 @@ export default function Landing() {
     if (!open) {
       // Reset state when dialog closes (via backdrop, ESC, or button)
       setEmail("");
+      setFirstName("");
+      setLastName("");
       setGeneratedToken(null);
       createTokenMutation.reset();
+    }
+  };
+
+  const handleForgotDialogChange = (open: boolean) => {
+    setForgotDialogOpen(open);
+    if (!open) {
+      // Reset state when dialog closes
+      setLookupEmail("");
+      setLookupFirstName("");
+      setLookupLastName("");
+      setFoundToken(null);
+      lookupTokenMutation.reset();
     }
   };
 
@@ -138,12 +201,38 @@ export default function Landing() {
                     <DialogHeader>
                       <DialogTitle>Create Your Free Access Token</DialogTitle>
                       <DialogDescription>
-                        Enter your email to get instant access to the bot hosting platform
+                        Enter your details to get instant access to the bot hosting platform
                       </DialogDescription>
                     </DialogHeader>
                     
                     {!generatedToken ? (
                       <form onSubmit={handleCreateToken} className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="firstName">First Name</Label>
+                            <Input
+                              id="firstName"
+                              type="text"
+                              value={firstName}
+                              onChange={(e) => setFirstName(e.target.value)}
+                              placeholder="John"
+                              data-testid="input-first-name"
+                              required
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="lastName">Last Name</Label>
+                            <Input
+                              id="lastName"
+                              type="text"
+                              value={lastName}
+                              onChange={(e) => setLastName(e.target.value)}
+                              placeholder="Doe"
+                              data-testid="input-last-name"
+                              required
+                            />
+                          </div>
+                        </div>
                         <div className="space-y-2">
                           <Label htmlFor="email">Email Address</Label>
                           <Input
@@ -211,9 +300,9 @@ export default function Landing() {
 
                 <Link href="/token-login">
                   <Button 
-                    variant="outline"
+                    variant="default"
                     size="lg" 
-                    className="px-8 py-6 text-lg"
+                    className="px-8 py-6 text-lg bg-chart-2 hover:bg-chart-2 border-chart-2"
                     data-testid="button-token-access"
                   >
                     <Key className="mr-2 h-5 w-5" />
@@ -221,6 +310,117 @@ export default function Landing() {
                   </Button>
                 </Link>
               </div>
+
+              <Dialog open={forgotDialogOpen} onOpenChange={handleForgotDialogChange}>
+                <DialogTrigger asChild>
+                  <Button 
+                    variant="ghost"
+                    size="sm"
+                    data-testid="button-forgot-token"
+                  >
+                    Forgot your token?
+                  </Button>
+                </DialogTrigger>
+                <DialogContent data-testid="dialog-forgot-token">
+                  <DialogHeader>
+                    <DialogTitle>Retrieve Your Access Token</DialogTitle>
+                    <DialogDescription>
+                      Enter your details to find your existing access token
+                    </DialogDescription>
+                  </DialogHeader>
+                  
+                  {!foundToken ? (
+                    <form onSubmit={handleLookupToken} className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="lookupFirstName">First Name</Label>
+                          <Input
+                            id="lookupFirstName"
+                            type="text"
+                            value={lookupFirstName}
+                            onChange={(e) => setLookupFirstName(e.target.value)}
+                            placeholder="John"
+                            data-testid="input-lookup-first-name"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="lookupLastName">Last Name</Label>
+                          <Input
+                            id="lookupLastName"
+                            type="text"
+                            value={lookupLastName}
+                            onChange={(e) => setLookupLastName(e.target.value)}
+                            placeholder="Doe"
+                            data-testid="input-lookup-last-name"
+                            required
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="lookupEmail">Email Address</Label>
+                        <Input
+                          id="lookupEmail"
+                          type="email"
+                          value={lookupEmail}
+                          onChange={(e) => setLookupEmail(e.target.value)}
+                          placeholder="your@email.com"
+                          data-testid="input-lookup-email"
+                          required
+                        />
+                      </div>
+                      <Button
+                        type="submit"
+                        className="w-full"
+                        disabled={lookupTokenMutation.isPending}
+                        data-testid="button-submit-lookup-token"
+                      >
+                        {lookupTokenMutation.isPending ? "Searching..." : "Find My Token"}
+                      </Button>
+                    </form>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="rounded-lg bg-card/50 p-4 border">
+                        <Label className="text-sm text-muted-foreground mb-2 block">Your Access Token</Label>
+                        <div className="flex items-center gap-2">
+                          <code className="flex-1 px-3 py-2 bg-background rounded text-sm font-mono" data-testid="text-found-token">
+                            {foundToken}
+                          </code>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              navigator.clipboard.writeText(foundToken);
+                              toast({ title: "Token copied to clipboard!" });
+                            }}
+                            data-testid="button-copy-found-token"
+                          >
+                            Copy
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        Use this token to access the dashboard.
+                      </div>
+                      <div className="flex gap-2">
+                        <Link href="/token-login" className="flex-1">
+                          <Button className="w-full" data-testid="button-use-found-token">
+                            <Key className="mr-2 h-4 w-4" />
+                            Use Token Now
+                          </Button>
+                        </Link>
+                        <Button 
+                          variant="outline" 
+                          onClick={() => handleForgotDialogChange(false)}
+                          data-testid="button-close-forgot-dialog"
+                        >
+                          Close
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </DialogContent>
+              </Dialog>
 
               <Card className="p-6 bg-card/50 max-w-md">
                 <div className="flex items-start gap-3">

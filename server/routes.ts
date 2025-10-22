@@ -144,10 +144,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Public token creation endpoint - always creates free tier users
   app.post('/api/public/create-token', async (req: any, res) => {
     try {
-      const { email } = req.body;
+      const { email, firstName, lastName } = req.body;
       
-      if (!email) {
-        return res.status(400).json({ message: "Email is required" });
+      if (!email || !firstName || !lastName) {
+        return res.status(400).json({ message: "Email, first name, and last name are required" });
       }
 
       // Check if user already exists with this email
@@ -157,6 +157,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) {
         user = await storage.createUser({
           email,
+          firstName,
+          lastName,
           tier: 'FREE',
           usageCount: 0,
           usageLimit: 5,
@@ -164,7 +166,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
         console.log(`[Token Creation] New user created: ${email} (ID: ${user.id})`);
       } else {
-        console.log(`[Token Creation] Existing user found: ${email} (ID: ${user.id})`);
+        // Update user's name if they already exist
+        await storage.updateUser(user.id, { firstName, lastName });
+        console.log(`[Token Creation] Existing user found and updated: ${email} (ID: ${user.id})`);
       }
 
       // Generate a unique token
@@ -188,6 +192,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error creating public token:", error);
       res.status(500).json({ message: "Failed to create token" });
+    }
+  });
+
+  // Public token lookup endpoint - find existing token by email and name
+  app.post('/api/public/lookup-token', async (req: any, res) => {
+    try {
+      const { email, firstName, lastName } = req.body;
+      
+      if (!email || !firstName || !lastName) {
+        return res.status(400).json({ message: "Email, first name, and last name are required" });
+      }
+
+      // Find user by email
+      const user = await storage.getUserByEmail(email);
+      
+      if (!user) {
+        return res.status(404).json({ message: "No account found with this email" });
+      }
+
+      // Verify name matches (case-insensitive comparison)
+      const firstNameMatches = user.firstName?.toLowerCase() === firstName.toLowerCase();
+      const lastNameMatches = user.lastName?.toLowerCase() === lastName.toLowerCase();
+      
+      if (!firstNameMatches || !lastNameMatches) {
+        return res.status(401).json({ message: "Name does not match our records" });
+      }
+
+      // Find an active token for this user
+      const tokens = await storage.getTokensByUserId(user.id);
+      const activeToken = tokens.find(t => t.isActive === 'true');
+      
+      if (!activeToken) {
+        return res.status(404).json({ message: "No active token found for this account" });
+      }
+      
+      console.log(`[Token Lookup] Token retrieved for ${email}`);
+      
+      res.json({ 
+        token: activeToken.token,
+        message: "Token found successfully"
+      });
+    } catch (error) {
+      console.error("Error looking up token:", error);
+      res.status(500).json({ message: "Failed to lookup token" });
     }
   });
 
