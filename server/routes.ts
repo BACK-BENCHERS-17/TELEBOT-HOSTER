@@ -1387,6 +1387,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         botProcesses.delete(botId);
       }
       
+      // Clear auto-install tracking
+      packageInstallAttempts.delete(botId);
+      stderrBuffer.delete(botId);
+      
       const updatedBot = await storage.updateBot(botId, { 
         status: 'stopped',
         processId: null,
@@ -1415,6 +1419,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         process.kill();
         botProcesses.delete(botId);
       }
+      
+      // Clear auto-install tracking on manual restart
+      packageInstallAttempts.delete(botId);
+      stderrBuffer.delete(botId);
       
       await storage.updateBot(botId, { status: 'stopped' });
       
@@ -1451,6 +1459,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         process.kill();
         botProcesses.delete(botId);
       }
+      
+      // Clear auto-install tracking
+      packageInstallAttempts.delete(botId);
+      stderrBuffer.delete(botId);
       
       // Clean up files
       if (bot.zipPath && fs.existsSync(bot.zipPath)) {
@@ -2420,8 +2432,9 @@ async function launchBot(botId: number) {
           errorMessage: `Process exited with code ${code}` 
         });
         
-        // Auto-restart for premium users with auto-restart enabled
-        if (user && user.autoRestart === 'true' && user.tier === 'PREMIUM') {
+        // Auto-restart for premium users with auto-restart enabled (only if not already being handled by auto-install)
+        const hasAttemptedPackages = packageInstallAttempts.has(botId) && packageInstallAttempts.get(botId)!.size > 0;
+        if (user && user.autoRestart === 'true' && user.tier === 'PREMIUM' && !hasAttemptedPackages) {
           console.log(`[Bot ${botId}] Auto-restarting due to error (Premium user with auto-restart enabled)`);
           setTimeout(async () => {
             try {
@@ -2434,6 +2447,9 @@ async function launchBot(botId: number) {
         }
       } else {
         await storage.updateBot(botId, { status: 'stopped' });
+        // Clear tracking data on successful exit
+        packageInstallAttempts.delete(botId);
+        stderrBuffer.delete(botId);
       }
     }
   });
@@ -2444,6 +2460,15 @@ async function launchBot(botId: number) {
     processId: botProcess.pid?.toString(),
     errorMessage: null,
   });
+  
+  // Reset installation attempts after bot runs successfully for 30 seconds
+  setTimeout(() => {
+    if (botProcesses.has(botId)) {
+      console.log(`[Bot ${botId}] ✅ Bot running successfully, resetting package installation tracking`);
+      packageInstallAttempts.delete(botId);
+      stderrBuffer.delete(botId);
+    }
+  }, 30000);
   
   return updatedBot;
 }
