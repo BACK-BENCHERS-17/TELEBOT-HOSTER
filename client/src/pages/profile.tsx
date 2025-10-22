@@ -21,6 +21,26 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import type { User } from "@shared/schema";
 import { Footer } from "@/components/Footer";
+import { MessageCircle } from "lucide-react";
+
+function ContactInfoQuery() {
+  const { data: contactInfo } = useQuery<{ contact: string }>({
+    queryKey: ["/api/auth/contact-info"],
+  });
+
+  return (
+    <a
+      href={`https://${contactInfo?.contact || 't.me/BACK_BENCHERS_x17'}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-2 text-sm text-primary hover-elevate active-elevate-2 px-3 py-1.5 rounded-md bg-background/50 border"
+      data-testid="link-contact-premium"
+    >
+      <MessageCircle className="h-4 w-4" />
+      <span>Contact for Premium Upgrade</span>
+    </a>
+  );
+}
 
 export default function Profile() {
   const { toast } = useToast();
@@ -198,14 +218,12 @@ export default function Profile() {
                   <div className="p-4 rounded-lg bg-chart-2/10 border border-chart-2/20">
                     <div className="flex items-start gap-3">
                       <Crown className="h-5 w-5 text-chart-2 shrink-0 mt-0.5" />
-                      <div>
+                      <div className="flex-1">
                         <p className="font-medium text-chart-2 mb-1">Upgrade to Premium</p>
                         <p className="text-sm text-muted-foreground mb-3">
                           Get unlimited bot deployments, auto-restart service, and priority support.
                         </p>
-                        <p className="text-sm text-muted-foreground">
-                          Contact the administrator to upgrade your account.
-                        </p>
+                        <ContactInfoQuery />
                       </div>
                     </div>
                   </div>

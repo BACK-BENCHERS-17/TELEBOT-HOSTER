@@ -34,6 +34,26 @@ import type { Bot as BotType } from "@shared/schema";
 import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Footer } from "@/components/Footer";
+import { MessageCircle } from "lucide-react";
+
+function ContactInfoQuery() {
+  const { data: contactInfo } = useQuery<{ contact: string }>({
+    queryKey: ["/api/auth/contact-info"],
+  });
+
+  return (
+    <a
+      href={`https://${contactInfo?.contact || 't.me/BACK_BENCHERS_x17'}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-2 text-sm text-primary hover-elevate active-elevate-2 px-3 py-1.5 rounded-md bg-background/50 border"
+      data-testid="link-contact-premium"
+    >
+      <MessageCircle className="h-4 w-4" />
+      <span>Contact for Premium Upgrade</span>
+    </a>
+  );
+}
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -189,11 +209,12 @@ export default function Dashboard() {
           <Card className="p-4 mb-6 bg-destructive/10 border-destructive/20">
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
-              <div>
+              <div className="flex-1">
                 <p className="font-medium text-destructive mb-1">Deployment Limit Reached</p>
-                <p className="text-sm text-muted-foreground">
-                  You've used all {user.usageLimit} of your free deployments. Contact the administrator to upgrade to PREMIUM for unlimited deployments.
+                <p className="text-sm text-muted-foreground mb-3">
+                  You've used all {user.usageLimit} of your free deployments. Upgrade to PREMIUM for unlimited deployments.
                 </p>
+                <ContactInfoQuery />
               </div>
             </div>
           </Card>
@@ -204,11 +225,12 @@ export default function Dashboard() {
           <Card className="p-4 mb-6 bg-chart-2/10 border-chart-2/20">
             <div className="flex items-start gap-3">
               <Crown className="h-5 w-5 text-chart-2 shrink-0 mt-0.5" />
-              <div>
+              <div className="flex-1">
                 <p className="font-medium text-chart-2 mb-1">Running Low on Deployments</p>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground mb-3">
                   You've used {user.usageCount} of {user.usageLimit} deployments. Upgrade to PREMIUM for unlimited deployments and auto-restart service.
                 </p>
+                <ContactInfoQuery />
               </div>
             </div>
           </Card>

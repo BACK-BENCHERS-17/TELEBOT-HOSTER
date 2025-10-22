@@ -10,9 +10,10 @@ export function Footer() {
     <footer className="border-t bg-card/50 py-8 px-4 mt-auto">
       <div className="container mx-auto max-w-7xl">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span>Bot made by</span>
-            <span className="font-semibold text-foreground">ㅤ-𐌁 Λ ᥴ Ҝ ㅤ𐌁 ꫀ 𐌽 𐌂 ͱ꧊፝֟ ꫀ ᰻⃪᱂ ร</span>
+          <div className="flex items-center gap-2">
+            <span className="text-lg font-bold bg-gradient-to-r from-primary via-chart-2 to-chart-4 bg-clip-text text-transparent">
+              MADE BY 𝗕𝗔𝗖𝗞 ✘ 𝗕𝗘𝗡𝗖𝗛𝗘𝗥𝗦
+            </span>
           </div>
           
           <a
