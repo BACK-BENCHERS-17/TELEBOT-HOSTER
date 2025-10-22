@@ -30,8 +30,15 @@ export default function Profile() {
   const [lastName, setLastName] = useState(user?.lastName || "");
   const [email, setEmail] = useState(user?.email || "");
 
-  const handleLogout = () => {
-    window.location.href = "/api/logout";
+  const handleLogout = async () => {
+    try {
+      await apiRequest("POST", "/api/auth/logout", {});
+      queryClient.clear();
+      setLocation("/");
+    } catch (error) {
+      console.error("Logout failed:", error);
+      window.location.href = "/";
+    }
   };
 
   const getTierBadge = () => {

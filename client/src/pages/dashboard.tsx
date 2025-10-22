@@ -32,6 +32,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { DeployBotDialog } from "@/components/DeployBotDialog";
 import type { Bot as BotType } from "@shared/schema";
 import { useLocation } from "wouter";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -42,8 +43,15 @@ export default function Dashboard() {
     queryKey: ["/api/bots"],
   });
 
-  const handleLogout = () => {
-    window.location.href = "/api/logout";
+  const handleLogout = async () => {
+    try {
+      await apiRequest("POST", "/api/auth/logout", {});
+      queryClient.clear();
+      setLocation("/");
+    } catch (error) {
+      console.error("Logout failed:", error);
+      window.location.href = "/";
+    }
   };
 
   const getStatusColor = (status: string) => {

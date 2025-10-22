@@ -22,7 +22,7 @@ export default function TokenLogin() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      setLocation("/");
+      setLocation("/dashboard");
       toast({ title: "Login successful!" });
     },
     onError: (error: any) => {
