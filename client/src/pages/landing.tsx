@@ -1,6 +1,17 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { 
   Upload, 
   Zap, 
@@ -9,17 +20,69 @@ import {
   Code2, 
   Rocket,
   Key,
-  MessageCircle
+  MessageCircle,
+  Sparkles
 } from "lucide-react";
 import { SiPython, SiNodedotjs, SiTelegram } from "react-icons/si";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Landing() {
+  const { toast } = useToast();
+  const [email, setEmail] = useState("");
+  const [generatedToken, setGeneratedToken] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+
   const { data: contactInfo } = useQuery<{ contact: string }>({
     queryKey: ["/api/auth/contact-info"],
   });
+
+  const createTokenMutation = useMutation({
+    mutationFn: async (userEmail: string) => {
+      const res = await apiRequest("POST", "/api/public/create-token", { email: userEmail });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setGeneratedToken(data.token);
+      toast({
+        title: "Token created successfully!",
+        description: "Your free access token has been generated.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to create token",
+        description: error.message || "Please try again",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleCreateToken = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) {
+      toast({
+        title: "Email required",
+        description: "Please enter your email address",
+        variant: "destructive",
+      });
+      return;
+    }
+    createTokenMutation.mutate(email.trim());
+  };
+
+  const handleDialogChange = (open: boolean) => {
+    setDialogOpen(open);
+    if (!open) {
+      // Reset state when dialog closes (via backdrop, ESC, or button)
+      setEmail("");
+      setGeneratedToken(null);
+      createTokenMutation.reset();
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -59,16 +122,105 @@ export default function Landing() {
             </p>
 
             <div className="flex flex-col items-center justify-center gap-4 pt-4">
-              <Link href="/token-login">
-                <Button 
-                  size="lg" 
-                  className="px-8 py-6 text-lg group"
-                  data-testid="button-token-access"
-                >
-                  <Key className="mr-2 h-5 w-5" />
-                  Access with Token
-                </Button>
-              </Link>
+              <div className="flex flex-wrap items-center justify-center gap-4">
+                <Dialog open={dialogOpen} onOpenChange={handleDialogChange}>
+                  <DialogTrigger asChild>
+                    <Button 
+                      size="lg" 
+                      className="px-8 py-6 text-lg"
+                      data-testid="button-create-token"
+                    >
+                      <Sparkles className="mr-2 h-5 w-5" />
+                      Create Free Token
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent data-testid="dialog-create-token">
+                    <DialogHeader>
+                      <DialogTitle>Create Your Free Access Token</DialogTitle>
+                      <DialogDescription>
+                        Enter your email to get instant access to the bot hosting platform
+                      </DialogDescription>
+                    </DialogHeader>
+                    
+                    {!generatedToken ? (
+                      <form onSubmit={handleCreateToken} className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="email">Email Address</Label>
+                          <Input
+                            id="email"
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="your@email.com"
+                            data-testid="input-email"
+                            required
+                          />
+                        </div>
+                        <Button
+                          type="submit"
+                          className="w-full"
+                          disabled={createTokenMutation.isPending}
+                          data-testid="button-submit-create-token"
+                        >
+                          {createTokenMutation.isPending ? "Creating..." : "Generate Free Token"}
+                        </Button>
+                      </form>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="rounded-lg bg-card/50 p-4 border">
+                          <Label className="text-sm text-muted-foreground mb-2 block">Your Access Token</Label>
+                          <div className="flex items-center gap-2">
+                            <code className="flex-1 px-3 py-2 bg-background rounded text-sm font-mono" data-testid="text-generated-token">
+                              {generatedToken}
+                            </code>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                navigator.clipboard.writeText(generatedToken);
+                                toast({ title: "Token copied to clipboard!" });
+                              }}
+                              data-testid="button-copy-token"
+                            >
+                              Copy
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          Save this token securely. You'll need it to access the dashboard.
+                        </div>
+                        <div className="flex gap-2">
+                          <Link href="/token-login" className="flex-1">
+                            <Button className="w-full" data-testid="button-use-token">
+                              <Key className="mr-2 h-4 w-4" />
+                              Use Token Now
+                            </Button>
+                          </Link>
+                          <Button 
+                            variant="outline" 
+                            onClick={() => handleDialogChange(false)}
+                            data-testid="button-close-dialog"
+                          >
+                            Close
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </DialogContent>
+                </Dialog>
+
+                <Link href="/token-login">
+                  <Button 
+                    variant="outline"
+                    size="lg" 
+                    className="px-8 py-6 text-lg"
+                    data-testid="button-token-access"
+                  >
+                    <Key className="mr-2 h-5 w-5" />
+                    I Have a Token
+                  </Button>
+                </Link>
+              </div>
 
               <Card className="p-6 bg-card/50 max-w-md">
                 <div className="flex items-start gap-3">
@@ -76,9 +228,9 @@ export default function Landing() {
                     <MessageCircle className="h-5 w-5 text-primary" />
                   </div>
                   <div className="text-left">
-                    <p className="text-sm font-medium mb-1">Need an access token?</p>
+                    <p className="text-sm font-medium mb-1">Need help?</p>
                     <p className="text-sm text-muted-foreground mb-3">
-                      Contact the developer to get your token
+                      Contact support for assistance
                     </p>
                     <a 
                       href={`https://${contactInfo?.contact || 't.me/BACK_BENCHERS_x17'}`}

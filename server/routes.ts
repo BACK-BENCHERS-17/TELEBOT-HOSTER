@@ -70,6 +70,42 @@ const botProcesses = new Map<number, any>();
 // WebSocket clients for log streaming
 const wsClients = new Map<string, Set<WebSocket>>();
 
+// Helper function to flatten nested folders - move all files to root level
+async function flattenExtractedFolder(extractedPath: string): Promise<void> {
+  const readdirAsync = promisify(fs.readdir);
+  const statAsync = promisify(fs.stat);
+  const renameAsync = promisify(fs.rename);
+  const rmdirAsync = promisify(fs.rmdir);
+  
+  // Read contents of extracted directory
+  const items = await readdirAsync(extractedPath);
+  
+  // If there's only one item and it's a directory, it might be a wrapper folder
+  if (items.length === 1) {
+    const itemPath = path.join(extractedPath, items[0]);
+    const stat = await statAsync(itemPath);
+    
+    if (stat.isDirectory()) {
+      console.log(`[Flatten] Found single root folder: ${items[0]}, flattening...`);
+      
+      // Get all items inside this folder
+      const innerItems = await readdirAsync(itemPath);
+      
+      // Move all items from the inner folder to the parent (extractedPath)
+      for (const innerItem of innerItems) {
+        const srcPath = path.join(itemPath, innerItem);
+        const destPath = path.join(extractedPath, innerItem);
+        await renameAsync(srcPath, destPath);
+        console.log(`[Flatten] Moved: ${innerItem}`);
+      }
+      
+      // Remove the now-empty folder
+      await rmdirAsync(itemPath);
+      console.log(`[Flatten] Removed empty folder: ${items[0]}`);
+    }
+  }
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication
   setupAuth(app);
@@ -102,6 +138,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error during token login:", error);
       res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  // Public token creation endpoint - always creates free tier users
+  app.post('/api/public/create-token', async (req: any, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      // Check if user already exists with this email
+      let user = await storage.getUserByEmail(email);
+      
+      // If user doesn't exist, create a new one with FREE tier
+      if (!user) {
+        user = await storage.createUser({
+          email,
+          tier: 'FREE',
+          usageCount: 0,
+          usageLimit: 5,
+          autoRestart: 'false',
+        });
+        console.log(`[Token Creation] New user created: ${email} (ID: ${user.id})`);
+      } else {
+        console.log(`[Token Creation] Existing user found: ${email} (ID: ${user.id})`);
+      }
+
+      // Generate a unique token
+      const randomPart = nanoid(8).toUpperCase();
+      const token = `BACK-${randomPart}`;
+      
+      // Create access token
+      const accessToken = await storage.createToken({
+        token,
+        userId: user.id,
+        isActive: 'true',
+        createdBy: 'public',
+      });
+      
+      console.log(`[Token Creation] Token created for ${email}: ${token}`);
+      
+      res.json({ 
+        token: accessToken.token,
+        message: "Token created successfully"
+      });
+    } catch (error) {
+      console.error("Error creating public token:", error);
+      res.status(500).json({ message: "Failed to create token" });
     }
   });
 
@@ -705,6 +791,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await fs.createReadStream(zipPath)
         .pipe(unzipper.Extract({ path: extractPath }))
         .promise();
+      
+      // Flatten nested folders if needed
+      await flattenExtractedFolder(extractPath);
       
       // Find bot directory and entry point (handle nested folders)
       let botDirectory = extractPath;
@@ -1866,6 +1955,9 @@ async function ensureBotFilesExist(bot: any) {
         .promise();
       
       console.log(`[Bot ${bot.id}] Extracted ZIP to ${bot.extractedPath}`);
+      
+      // Flatten nested folders if needed
+      await flattenExtractedFolder(bot.extractedPath);
       
       // Clean up temp ZIP
       await unlinkAsync(tempZipPath);
