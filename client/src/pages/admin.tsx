@@ -378,7 +378,7 @@ export default function AdminPanel() {
                         id="firstName"
                         value={newUserFirstName}
                         onChange={(e) => setNewUserFirstName(e.target.value)}
-                        placeholder="John"
+                        placeholder="Back"
                         data-testid="input-user-firstname"
                       />
                     </div>
@@ -388,7 +388,7 @@ export default function AdminPanel() {
                         id="lastName"
                         value={newUserLastName}
                         onChange={(e) => setNewUserLastName(e.target.value)}
-                        placeholder="Doe"
+                        placeholder="Benchers"
                         data-testid="input-user-lastname"
                       />
                     </div>
@@ -400,7 +400,7 @@ export default function AdminPanel() {
                       type="email"
                       value={newUserEmail}
                       onChange={(e) => setNewUserEmail(e.target.value)}
-                      placeholder="john@example.com"
+                      placeholder="backbenchers@example.com"
                       required
                       data-testid="input-user-email"
                     />

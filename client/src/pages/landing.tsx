@@ -1,10 +1,6 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
 import { 
   Upload, 
   Zap, 
@@ -13,65 +9,17 @@ import {
   Code2, 
   Rocket,
   Key,
-  MessageCircle,
-  User,
-  Mail,
-  Crown,
-  Check
+  MessageCircle
 } from "lucide-react";
 import { SiPython, SiNodedotjs, SiTelegram } from "react-icons/si";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Link } from "wouter";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { useQuery } from "@tanstack/react-query";
 
 export default function Landing() {
-  const { toast } = useToast();
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [email, setEmail] = useState("");
-  const [requestSubmitted, setRequestSubmitted] = useState(false);
-
   const { data: contactInfo } = useQuery<{ contact: string }>({
     queryKey: ["/api/auth/contact-info"],
   });
-
-  const requestTokenMutation = useMutation({
-    mutationFn: async (data: { firstName: string; lastName: string; email: string }) => {
-      const res = await apiRequest("POST", "/api/request-token", data);
-      return res.json();
-    },
-    onSuccess: () => {
-      setRequestSubmitted(true);
-      setFirstName("");
-      setLastName("");
-      setEmail("");
-      toast({
-        title: "Token request submitted!",
-        description: "An administrator will review your request and create your access token soon.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Request failed",
-        description: error.message || "Failed to submit token request. Please try again.",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const handleRequestToken = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!firstName || !lastName || !email) {
-      toast({
-        title: "Missing information",
-        description: "Please fill in all fields",
-        variant: "destructive",
-      });
-      return;
-    }
-    requestTokenMutation.mutate({ firstName, lastName, email });
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -228,9 +176,9 @@ export default function Landing() {
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground text-2xl font-bold">
                 1
               </div>
-              <h3 className="text-xl font-semibold">Request Access Token</h3>
+              <h3 className="text-xl font-semibold">Get Access Token</h3>
               <p className="text-muted-foreground">
-                Fill out the form below to request your free access token. We'll create your account and send you the token.
+                Contact the developer via Telegram to receive your unique free access token.
               </p>
             </div>
 
@@ -254,171 +202,6 @@ export default function Landing() {
               </p>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* Token Request Form */}
-      <section className="py-20 px-4 bg-card/50">
-        <div className="container mx-auto max-w-2xl">
-          <div className="text-center mb-12">
-            <h2 className="text-4xl font-bold mb-4">Request Your Access Token</h2>
-            <p className="text-lg text-muted-foreground">
-              Fill out the form below to get started with a FREE account
-            </p>
-          </div>
-
-          {requestSubmitted ? (
-            <Card className="p-8 bg-chart-3/10 border-chart-3/20">
-              <div className="text-center space-y-4">
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-chart-3">
-                  <Check className="h-8 w-8 text-white" />
-                </div>
-                <h3 className="text-2xl font-bold text-chart-3">Request Submitted!</h3>
-                <p className="text-muted-foreground max-w-md mx-auto">
-                  Thank you for your request. An administrator will review it and create your FREE account with an access token. You'll be able to login once your account is created.
-                </p>
-                <Button
-                  variant="outline"
-                  onClick={() => setRequestSubmitted(false)}
-                  data-testid="button-submit-another"
-                >
-                  Submit Another Request
-                </Button>
-              </div>
-            </Card>
-          ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Key className="h-5 w-5" />
-                  Token Request Form
-                </CardTitle>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Your account will be created as a FREE tier with limited deployments. Contact the administrator to upgrade to PREMIUM.
-                </p>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleRequestToken} className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="firstName">First Name *</Label>
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="firstName"
-                          value={firstName}
-                          onChange={(e) => setFirstName(e.target.value)}
-                          placeholder="John"
-                          required
-                          data-testid="input-request-firstname"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="lastName">Last Name *</Label>
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="lastName"
-                          value={lastName}
-                          onChange={(e) => setLastName(e.target.value)}
-                          placeholder="Doe"
-                          required
-                          data-testid="input-request-lastname"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email Address *</Label>
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="email"
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="john@example.com"
-                        required
-                        data-testid="input-request-email"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="p-4 rounded-lg bg-muted/50 border space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="secondary">FREE Account Features</Badge>
-                    </div>
-                    <ul className="text-sm text-muted-foreground space-y-2">
-                      <li className="flex items-start gap-2">
-                        <Check className="h-4 w-4 text-chart-3 shrink-0 mt-0.5" />
-                        <span>Limited bot deployments (5 by default)</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <Check className="h-4 w-4 text-chart-3 shrink-0 mt-0.5" />
-                        <span>Full access to deployment dashboard</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <Check className="h-4 w-4 text-chart-3 shrink-0 mt-0.5" />
-                        <span>Real-time bot monitoring and logs</span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <div className="p-4 rounded-lg bg-chart-2/10 border border-chart-2/20 space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Crown className="h-4 w-4 text-chart-2" />
-                      <Badge className="bg-gradient-to-r from-chart-2 to-primary text-white gap-2">
-                        <Crown className="h-3 w-3" />
-                        PREMIUM Features
-                      </Badge>
-                    </div>
-                    <ul className="text-sm text-muted-foreground space-y-2">
-                      <li className="flex items-start gap-2">
-                        <Crown className="h-4 w-4 text-chart-2 shrink-0 mt-0.5" />
-                        <span>Unlimited bot deployments</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <Crown className="h-4 w-4 text-chart-2 shrink-0 mt-0.5" />
-                        <span>Auto-restart service for crashed bots</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <Crown className="h-4 w-4 text-chart-2 shrink-0 mt-0.5" />
-                        <span>Priority support</span>
-                      </li>
-                    </ul>
-                    <div className="flex items-center gap-2 pt-2">
-                      <MessageCircle className="h-4 w-4 text-chart-2" />
-                      <span className="text-sm font-medium text-chart-2">
-                        Contact the administrator to upgrade to PREMIUM
-                      </span>
-                    </div>
-                    <a 
-                      href={`https://${contactInfo?.contact || 't.me/BACK_BENCHERS_x17'}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <Badge className="bg-[#0088cc] hover:bg-[#0088cc]/90 text-white gap-2">
-                        <SiTelegram className="h-4 w-4" />
-                        {contactInfo?.contact || 't.me/BACK_BENCHERS_x17'}
-                      </Badge>
-                    </a>
-                  </div>
-
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={requestTokenMutation.isPending}
-                    data-testid="button-submit-request"
-                  >
-                    {requestTokenMutation.isPending ? "Submitting..." : "Request Access Token"}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-          )}
         </div>
       </section>
 
