@@ -83,7 +83,7 @@ export const bots = pgTable("bots", {
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"), // Optional bot description
   runtime: varchar("runtime", { length: 50 }).notNull(), // 'python' or 'nodejs'
-  status: varchar("status", { length: 50 }).notNull().default('stopped'), // 'running', 'stopped', 'error', 'deploying', 'starting', 'stopping'
+  status: varchar("status", { length: 50 }).notNull().default('stopped'), // 'running', 'stopped', 'error', 'deploying', 'starting', 'stopping', 'installing'
   zipPath: text("zip_path"), // Path to uploaded ZIP file
   extractedPath: text("extracted_path"), // Path to extracted bot files (directory with dependencies)
   entryPoint: text("entry_point"), // Relative path to entry file (e.g., 'main.py', 'src/bot.py')

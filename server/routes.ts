@@ -228,6 +228,180 @@ async function flattenExtractedFolder(extractedPath: string): Promise<void> {
   }
 }
 
+// Helper function to install bot dependencies from requirements.txt or package.json
+async function installBotDependencies(botId: number, botDirectory: string, runtime: string): Promise<void> {
+  console.log(`[Bot ${botId}] 📦 Installing dependencies...`);
+  
+  if (runtime === 'python') {
+    const requirementsPath = path.join(botDirectory, 'requirements.txt');
+    const uvLockPath = path.join(botDirectory, 'uv.lock');
+    const pyprojectPath = path.join(botDirectory, 'pyproject.toml');
+    
+    // Check if any dependency file exists
+    const hasRequirements = fs.existsSync(requirementsPath);
+    const hasUvLock = fs.existsSync(uvLockPath);
+    const hasPyproject = fs.existsSync(pyprojectPath);
+    
+    if (!hasRequirements && !hasUvLock && !hasPyproject) {
+      console.log(`[Bot ${botId}] ℹ️  No dependency files found, skipping installation`);
+      return;
+    }
+    
+    const absoluteBotDir = path.resolve(botDirectory);
+    
+    // Try using uv first if available and uv.lock exists
+    if (isUvAvailable() && (hasUvLock || hasPyproject)) {
+      console.log(`[Bot ${botId}] Using uv to install dependencies`);
+      
+      await new Promise<void>((resolve, reject) => {
+        let stdoutData = '';
+        let stderrData = '';
+        
+        const installer = spawn('uv', ['sync'], {
+          cwd: absoluteBotDir,
+          stdio: 'pipe'
+        });
+        
+        installer.stdout?.on('data', (data) => {
+          stdoutData += data.toString();
+          console.log(`[Bot ${botId}] uv: ${data.toString().trim()}`);
+        });
+        
+        installer.stderr?.on('data', (data) => {
+          stderrData += data.toString();
+          console.error(`[Bot ${botId}] uv stderr: ${data.toString().trim()}`);
+        });
+        
+        installer.on('error', (err) => {
+          reject(new Error(`Failed to start uv: ${err.message}`));
+        });
+        
+        installer.on('close', (code: number | null) => {
+          if (code === 0) {
+            console.log(`[Bot ${botId}] ✅ Dependencies installed with uv`);
+            resolve();
+          } else {
+            const errorMsg = stderrData || stdoutData || `Unknown error (exit code: ${code})`;
+            reject(new Error(`Failed to install dependencies with uv: ${errorMsg}`));
+          }
+        });
+      });
+    } else if (hasRequirements) {
+      // Fall back to pip with virtual environment
+      const venvPath = path.join(absoluteBotDir, '.venv');
+      
+      // Create venv if it doesn't exist
+      if (!fs.existsSync(venvPath)) {
+        console.log(`[Bot ${botId}] Creating virtual environment...`);
+        
+        await new Promise<void>((resolve, reject) => {
+          const venv = spawn('python3', ['-m', 'venv', '.venv'], {
+            cwd: absoluteBotDir,
+            stdio: 'pipe'
+          });
+          
+          venv.on('error', (err) => {
+            reject(new Error(`Failed to create virtual environment: ${err.message}`));
+          });
+          
+          venv.on('close', (code: number | null) => {
+            if (code === 0) {
+              console.log(`[Bot ${botId}] ✅ Virtual environment created`);
+              resolve();
+            } else {
+              reject(new Error(`Failed to create virtual environment (exit code: ${code})`));
+            }
+          });
+        });
+      }
+      
+      // Install dependencies using venv pip
+      console.log(`[Bot ${botId}] Installing dependencies with pip...`);
+      
+      await new Promise<void>((resolve, reject) => {
+        let stdoutData = '';
+        let stderrData = '';
+        
+        const pythonPath = path.resolve(path.join(venvPath, 'bin', 'python'));
+        
+        if (!fs.existsSync(pythonPath)) {
+          reject(new Error(`Virtual environment Python not found at ${pythonPath}`));
+          return;
+        }
+        
+        const installer = spawn(pythonPath, ['-m', 'pip', 'install', '--no-user', '-r', 'requirements.txt'], {
+          cwd: absoluteBotDir,
+          stdio: 'pipe',
+          env: { ...process.env, PIP_USER: '0' }
+        });
+        
+        installer.stdout?.on('data', (data) => {
+          stdoutData += data.toString();
+          console.log(`[Bot ${botId}] pip: ${data.toString().trim()}`);
+        });
+        
+        installer.stderr?.on('data', (data) => {
+          stderrData += data.toString();
+          console.error(`[Bot ${botId}] pip stderr: ${data.toString().trim()}`);
+        });
+        
+        installer.on('error', (err) => {
+          reject(new Error(`Failed to start pip: ${err.message}`));
+        });
+        
+        installer.on('close', (code: number | null) => {
+          if (code === 0) {
+            console.log(`[Bot ${botId}] ✅ Dependencies installed with pip`);
+            resolve();
+          } else {
+            const errorMsg = stderrData || stdoutData || `Unknown error (exit code: ${code})`;
+            reject(new Error(`Failed to install dependencies with pip: ${errorMsg}`));
+          }
+        });
+      });
+    }
+  } else if (runtime === 'nodejs') {
+    const packageJsonPath = path.join(botDirectory, 'package.json');
+    
+    if (!fs.existsSync(packageJsonPath)) {
+      console.log(`[Bot ${botId}] ℹ️  No package.json found, skipping installation`);
+      return;
+    }
+    
+    console.log(`[Bot ${botId}] Installing Node.js dependencies...`);
+    
+    await new Promise<void>((resolve, reject) => {
+      const npm = spawn('npm', ['install'], {
+        cwd: botDirectory,
+        stdio: 'pipe'
+      });
+      
+      npm.stdout?.on('data', (data) => {
+        console.log(`[Bot ${botId}] npm: ${data.toString().trim()}`);
+      });
+      
+      npm.stderr?.on('data', (data) => {
+        console.error(`[Bot ${botId}] npm stderr: ${data.toString().trim()}`);
+      });
+      
+      npm.on('error', (err: any) => {
+        reject(new Error(`Failed to start npm: ${err.message}`));
+      });
+      
+      npm.on('close', (code: number | null) => {
+        if (code === 0) {
+          console.log(`[Bot ${botId}] ✅ Dependencies installed with npm`);
+          resolve();
+        } else {
+          reject(new Error(`Failed to install Node.js dependencies (exit code: ${code})`));
+        }
+      });
+    });
+  }
+  
+  console.log(`[Bot ${botId}] ✅ All dependencies installed successfully`);
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication
   setupAuth(app);
@@ -2105,123 +2279,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   return httpServer;
 }
 
-// Helper function to install bot dependencies
-async function installBotDependencies(bot: any): Promise<void> {
-  const botDirectory = bot.extractedPath!;
-  
-  // Check which dependency files exist
-  const files = await promisify(fs.readdir)(botDirectory);
-  const hasRequirementsTxt = files.some(f => f.toLowerCase() === 'requirements.txt');
-  const hasUvLock = files.some(f => f.toLowerCase() === 'uv.lock');
-  const hasPyproject = files.some(f => f.toLowerCase() === 'pyproject.toml');
-  const hasPackageJson = files.some(f => f.toLowerCase() === 'package.json');
-  
-  if (bot.runtime === 'python' && (hasRequirementsTxt || hasUvLock || hasPyproject)) {
-    const uvAvailable = isUvAvailable();
-    const useUv = uvAvailable && (hasUvLock || (hasPyproject && !hasRequirementsTxt));
-    
-    if (useUv) {
-      console.log(`[Bot ${bot.id}] Installing dependencies using uv...`);
-      await new Promise<void>((resolve, reject) => {
-        const installer = spawn('uv', ['sync'], {
-          cwd: botDirectory,
-          stdio: 'inherit',
-          env: { ...process.env }
-        });
-        
-        installer.on('error', (err) => {
-          reject(new Error(`Failed to start uv: ${err.message}`));
-        });
-        
-        installer.on('close', (code: number | null) => {
-          if (code === 0) {
-            console.log(`✓ Installed Python dependencies using uv for bot ${bot.id}`);
-            resolve();
-          } else {
-            reject(new Error(`Failed to install Python dependencies (exit code: ${code})`));
-          }
-        });
-      });
-    } else {
-      // Create virtual environment
-      const absoluteBotDir = path.resolve(botDirectory);
-      const venvPath = path.join(absoluteBotDir, '.venv');
-      console.log(`[Bot ${bot.id}] Creating virtual environment...`);
-      
-      await new Promise<void>((resolve, reject) => {
-        const venv = spawn('python3', ['-m', 'venv', '.venv'], {
-          cwd: absoluteBotDir,
-          stdio: 'inherit'
-        });
-        
-        venv.on('error', (err) => {
-          reject(new Error(`Failed to start venv creation: ${err.message}`));
-        });
-        
-        venv.on('close', (code: number | null) => {
-          if (code === 0) {
-            resolve();
-          } else {
-            reject(new Error(`Failed to create virtual environment (exit code: ${code})`));
-          }
-        });
-      });
-      
-      // Install dependencies
-      console.log(`[Bot ${bot.id}] Installing dependencies using pip...`);
-      const pythonPath = path.resolve(path.join(venvPath, 'bin', 'python'));
-      
-      if (!fs.existsSync(pythonPath)) {
-        throw new Error(`Virtual environment Python not found at ${pythonPath}`);
-      }
-      
-      await new Promise<void>((resolve, reject) => {
-        const installer = spawn(pythonPath, ['-m', 'pip', 'install', '--no-user', '-r', 'requirements.txt'], {
-          cwd: absoluteBotDir,
-          stdio: 'inherit',
-          env: { ...process.env, PIP_USER: '0' }
-        });
-        
-        installer.on('error', (err) => {
-          reject(new Error(`Failed to start pip: ${err.message}`));
-        });
-        
-        installer.on('close', (code: number | null) => {
-          if (code === 0) {
-            console.log(`✓ Installed Python dependencies for bot ${bot.id}`);
-            resolve();
-          } else {
-            reject(new Error(`Failed to install Python dependencies (exit code: ${code})`));
-          }
-        });
-      });
-    }
-  }
-  
-  if (bot.runtime === 'nodejs' && hasPackageJson) {
-    console.log(`[Bot ${bot.id}] Installing dependencies using npm...`);
-    await new Promise<void>((resolve, reject) => {
-      const npm = spawn('npm', ['install'], {
-        cwd: botDirectory,
-        stdio: 'inherit'
-      });
-      
-      npm.on('error', (err) => {
-        reject(new Error(`Failed to start npm: ${err.message}`));
-      });
-      
-      npm.on('close', (code: number | null) => {
-        if (code === 0) {
-          console.log(`✓ Installed Node.js dependencies for bot ${bot.id}`);
-          resolve();
-        } else {
-          reject(new Error(`Failed to install Node.js dependencies (exit code: ${code})`));
-        }
-      });
-    });
-  }
-}
-
 // Helper function to ensure bot files are restored from GridFS if needed
 async function ensureBotFilesExist(bot: any) {
   if (!bot.extractedPath) {
@@ -2277,7 +2334,7 @@ async function ensureBotFilesExist(bot: any) {
       
       // Install dependencies after restoring files
       console.log(`[Bot ${bot.id}] Installing packages...`);
-      await installBotDependencies(bot);
+      await installBotDependencies(bot.id, bot.extractedPath, bot.runtime);
       console.log(`✅ Bot ${bot.id} packages installed successfully`);
     } catch (error: any) {
       console.error(`[Bot ${bot.id}] Failed to restore files from GridFS:`, error);
@@ -2302,6 +2359,21 @@ async function launchBot(botId: number) {
   
   // Ensure bot files exist (restore from GridFS if needed)
   await ensureBotFilesExist(bot);
+  
+  // Install dependencies before starting (show installing status)
+  try {
+    await storage.updateBot(botId, { status: 'installing' });
+    console.log(`[Bot ${botId}] 📦 Checking and installing dependencies...`);
+    await installBotDependencies(botId, bot.extractedPath!, bot.runtime);
+    console.log(`[Bot ${botId}] ✅ Dependencies ready`);
+  } catch (error: any) {
+    console.error(`[Bot ${botId}] ❌ Failed to install dependencies:`, error);
+    await storage.updateBot(botId, { 
+      status: 'error', 
+      errorMessage: `Failed to install dependencies: ${error.message}` 
+    });
+    throw error;
+  }
   
   // Get environment variables
   const envVars = await storage.getEnvVarsByBotId(botId);

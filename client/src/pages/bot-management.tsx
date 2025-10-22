@@ -91,6 +91,13 @@ export default function BotManagement() {
   const { data: bot, isLoading } = useQuery<BotType>({
     queryKey: ['/api/bots', botId],
     enabled: isValidBotId,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (status === 'installing' || status === 'starting') {
+        return 2000;
+      }
+      return false;
+    },
   });
 
   const { data: envVars = [] } = useQuery<EnvironmentVariable[]>({
@@ -367,6 +374,8 @@ export default function BotManagement() {
         return 'bg-chart-4 text-white';
       case 'stopping':
         return 'bg-chart-5 text-white';
+      case 'installing':
+        return 'bg-chart-1 text-white';
       case 'stopped':
         return 'bg-muted text-muted-foreground';
       case 'error':
@@ -407,6 +416,7 @@ export default function BotManagement() {
             </div>
             <Badge className={getStatusColor(bot.status)} data-testid="badge-bot-status">
               {bot.status === 'running' && <Activity className="mr-1.5 h-3 w-3 animate-pulse" />}
+              {bot.status === 'installing' && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
               <span className="capitalize">{bot.status}</span>
             </Badge>
           </div>
@@ -443,16 +453,20 @@ export default function BotManagement() {
                 <div className="flex gap-3 pt-4 border-t">
                   <Button
                     onClick={() => startMutation.mutate()}
-                    disabled={bot.status === 'running' || startMutation.isPending}
+                    disabled={bot.status === 'running' || bot.status === 'installing' || bot.status === 'starting' || startMutation.isPending}
                     data-testid="button-start-bot"
                   >
-                    <PlayCircle className="mr-2 h-4 w-4" />
-                    Start
+                    {startMutation.isPending || bot.status === 'installing' ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <PlayCircle className="mr-2 h-4 w-4" />
+                    )}
+                    {bot.status === 'installing' ? 'Installing...' : 'Start'}
                   </Button>
                   <Button
                     variant="destructive"
                     onClick={() => stopMutation.mutate()}
-                    disabled={bot.status === 'stopped' || stopMutation.isPending}
+                    disabled={bot.status === 'stopped' || bot.status === 'installing' || stopMutation.isPending}
                     data-testid="button-stop-bot"
                   >
                     <StopCircle className="mr-2 h-4 w-4" />
@@ -461,7 +475,7 @@ export default function BotManagement() {
                   <Button
                     variant="outline"
                     onClick={() => restartMutation.mutate()}
-                    disabled={restartMutation.isPending}
+                    disabled={bot.status === 'installing' || restartMutation.isPending}
                     data-testid="button-restart-bot"
                   >
                     <RotateCw className="mr-2 h-4 w-4" />
@@ -997,6 +1011,27 @@ export default function BotManagement() {
           </TabsContent>
         </Tabs>
       </main>
+
+      <Dialog open={bot.status === 'installing'}>
+        <DialogContent className="sm:max-w-md" data-testid="dialog-installing">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              Installing Dependencies
+            </DialogTitle>
+            <DialogDescription>
+              Please wait while we install the required packages from requirements.txt...
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-4 py-8">
+            <Loader2 className="h-16 w-16 animate-spin text-primary" data-testid="spinner-installing" />
+            <div className="text-center space-y-2">
+              <p className="text-sm font-medium">Setting up your bot environment</p>
+              <p className="text-xs text-muted-foreground">This may take a few moments</p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
