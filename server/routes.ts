@@ -86,7 +86,11 @@ function extractMissingPackage(errorMessage: string): string | null {
   match = errorMessage.match(/ImportError:.*?No module named ['"]?([^'"\s]+)['"]?/);
   if (match) return match[1].split('.')[0];
   
-  // Pattern 3: cannot import name 'X' from 'package_name'
+  // Pattern 3: Import error: No module named 'package_name' (custom format)
+  match = errorMessage.match(/Import error:.*?No module named ['"]([^'"]+)['"]/i);
+  if (match) return match[1].split('.')[0];
+  
+  // Pattern 4: cannot import name 'X' from 'package_name'
   match = errorMessage.match(/cannot import name.*?from ['"]([^'"]+)['"]/);
   if (match) return match[1].split('.')[0];
   
@@ -2374,9 +2378,38 @@ async function launchBot(botId: number) {
   });
   
   // Handle process output
-  botProcess.stdout.on('data', (data: Buffer) => {
-    const log = data.toString();
+  botProcess.stdout.on('data', async (data: Buffer) => {
+    const outputText = data.toString();
+    const log = outputText;
     broadcastLog(botId.toString(), log);
+    
+    // Also check stdout for import errors (some bots print errors to stdout)
+    const missingPackage = extractMissingPackage(outputText);
+    if (missingPackage && bot.runtime === 'python') {
+      console.log(`[Bot ${botId}] 🔍 Detected missing package in stdout: ${missingPackage}`);
+      
+      // Stop the current bot process
+      if (botProcesses.has(botId)) {
+        botProcesses.get(botId)?.kill();
+        botProcesses.delete(botId);
+      }
+      
+      // Install the package
+      const installed = await autoInstallPackage(botId, missingPackage, bot);
+      
+      if (installed) {
+        // Restart the bot after installing the package
+        console.log(`[Bot ${botId}] 🔄 Restarting bot after installing ${missingPackage}...`);
+        setTimeout(async () => {
+          try {
+            await launchBot(botId);
+            console.log(`[Bot ${botId}] ✅ Restarted successfully after package installation`);
+          } catch (error) {
+            console.error(`[Bot ${botId}] ❌ Failed to restart after package installation:`, error);
+          }
+        }, 2000);
+      }
+    }
   });
   
   botProcess.stderr.on('data', async (data: Buffer) => {
