@@ -156,6 +156,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ contact: DEVELOPER_CONTACT });
   });
 
+  // Token request endpoint
+  app.post('/api/request-token', async (req, res) => {
+    try {
+      const { firstName, lastName, email } = req.body;
+      
+      if (!firstName || !lastName || !email) {
+        return res.status(400).json({ message: "All fields are required" });
+      }
+
+      console.log('\n==============================================');
+      console.log('🔔 NEW TOKEN REQUEST RECEIVED');
+      console.log('==============================================');
+      console.log(`Name: ${firstName} ${lastName}`);
+      console.log(`Email: ${email}`);
+      console.log(`Time: ${new Date().toISOString()}`);
+      console.log('==============================================\n');
+
+      res.json({ 
+        success: true, 
+        message: "Token request received. An administrator will review and create your account." 
+      });
+    } catch (error) {
+      console.error("Error processing token request:", error);
+      res.status(500).json({ message: "Failed to process token request" });
+    }
+  });
+
   // Alive/health check endpoint for uptime monitoring
   app.get('/api/alive', (req, res) => {
     res.status(200).json({
@@ -529,6 +556,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating user:", error);
       res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+
+  app.delete('/api/admin/users/:id', isAdmin, async (req: any, res) => {
+    try {
+      const userId = req.params.id;
+      await storage.deleteUser(userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      res.status(500).json({ message: "Failed to delete user" });
     }
   });
 

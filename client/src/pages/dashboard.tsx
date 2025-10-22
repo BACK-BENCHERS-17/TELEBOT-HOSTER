@@ -13,6 +13,9 @@ import {
   Settings as SettingsIcon,
   Loader2,
   Bot,
+  User,
+  Crown,
+  AlertTriangle,
 } from "lucide-react";
 import { SiPython, SiNodedotjs } from "react-icons/si";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -117,6 +120,10 @@ export default function Dashboard() {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setLocation("/profile")} data-testid="button-profile">
+                  <User className="mr-2 h-4 w-4" />
+                  My Profile
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleLogout} data-testid="button-logout">
                   <LogOut className="mr-2 h-4 w-4" />
                   Logout
@@ -129,22 +136,88 @@ export default function Dashboard() {
 
       {/* Main Content */}
       <main className="container mx-auto max-w-7xl px-4 py-12">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-4xl font-bold mb-2">My Bots</h1>
+            <div className="flex items-center gap-3 mb-2">
+              <h1 className="text-4xl font-bold">My Bots</h1>
+              {user?.tier === 'PREMIUM' ? (
+                <Badge className="bg-gradient-to-r from-chart-2 to-primary text-white gap-2" data-testid="badge-premium">
+                  <Crown className="h-3 w-3" />
+                  PREMIUM
+                </Badge>
+              ) : (
+                <Badge variant="secondary" data-testid="badge-free">FREE</Badge>
+              )}
+            </div>
             <p className="text-muted-foreground">
               Manage and monitor your deployed Telegram bots
             </p>
+            {user?.tier === 'FREE' && (
+              <p className="text-sm text-muted-foreground mt-1" data-testid="text-usage-info">
+                Usage: <span className="font-medium">{user?.usageCount} / {user?.usageLimit}</span> deployments
+                {user.usageCount >= user.usageLimit && (
+                  <span className="text-destructive ml-2">(Limit reached)</span>
+                )}
+              </p>
+            )}
           </div>
           <Button 
             size="lg"
             onClick={() => setDeployDialogOpen(true)}
+            disabled={user?.tier === 'FREE' && (user?.usageCount || 0) >= (user?.usageLimit || 0)}
             data-testid="button-deploy-bot"
           >
             <Plus className="mr-2 h-5 w-5" />
             Deploy Bot
           </Button>
         </div>
+
+        {/* Usage Limit Warning for FREE users */}
+        {user?.tier === 'FREE' && user?.usageCount >= user?.usageLimit && (
+          <Card className="p-4 mb-6 bg-destructive/10 border-destructive/20">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-destructive mb-1">Deployment Limit Reached</p>
+                <p className="text-sm text-muted-foreground">
+                  You've used all {user.usageLimit} of your free deployments. Contact the administrator to upgrade to PREMIUM for unlimited deployments.
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Upgrade suggestion for FREE users nearing limit */}
+        {user?.tier === 'FREE' && user?.usageCount >= (user?.usageLimit || 0) * 0.8 && user?.usageCount < user?.usageLimit && (
+          <Card className="p-4 mb-6 bg-chart-2/10 border-chart-2/20">
+            <div className="flex items-start gap-3">
+              <Crown className="h-5 w-5 text-chart-2 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-chart-2 mb-1">Running Low on Deployments</p>
+                <p className="text-sm text-muted-foreground">
+                  You've used {user.usageCount} of {user.usageLimit} deployments. Upgrade to PREMIUM for unlimited deployments and auto-restart service.
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Auto-restart info for PREMIUM users */}
+        {user?.tier === 'PREMIUM' && user?.autoRestart === 'true' && (
+          <Card className="p-4 mb-6 bg-chart-3/10 border-chart-3/20">
+            <div className="flex items-start gap-3">
+              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-chart-3 shrink-0 mt-0.5">
+                <span className="text-xs text-white font-bold">✓</span>
+              </div>
+              <div>
+                <p className="font-medium text-chart-3 mb-1">Auto-Restart Service Active</p>
+                <p className="text-sm text-muted-foreground">
+                  Your bots will automatically restart if they crash or encounter errors. This is a PREMIUM feature.
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
 
         {isLoading ? (
           <div className="flex items-center justify-center py-20">

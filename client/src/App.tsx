@@ -12,6 +12,7 @@ import BotManagement from "@/pages/bot-management";
 import TokenLogin from "@/pages/token-login";
 import AdminPanel from "@/pages/admin";
 import AlivePage from "@/pages/alive";
+import Profile from "@/pages/profile";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -26,6 +27,8 @@ function Router() {
       ) : (
         <>
           <Route path="/" component={Dashboard} />
+          <Route path="/dashboard" component={Dashboard} />
+          <Route path="/profile" component={Profile} />
           <Route path="/bot/:id" component={BotManagement} />
         </>
       )}

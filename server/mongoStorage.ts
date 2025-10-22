@@ -225,6 +225,11 @@ export class MongoStorage implements IStorage {
     return this.mapUserFromMongo(user);
   }
 
+  async deleteUser(id: string): Promise<void> {
+    await this.connect();
+    await UserModel.findByIdAndDelete(id);
+  }
+
   async incrementUsage(userId: string): Promise<User> {
     await this.connect();
     const user = await UserModel.findByIdAndUpdate(

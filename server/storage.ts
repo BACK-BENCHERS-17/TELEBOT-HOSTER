@@ -24,6 +24,7 @@ export interface IStorage {
   createUser(user: Omit<UpsertUser, 'id'>): Promise<User>;
   getAllUsers(): Promise<User[]>;
   updateUser(id: string, updates: Partial<User>): Promise<User>;
+  deleteUser(id: string): Promise<void>;
   incrementUsage(userId: string): Promise<User>;
   
   // Access Token operations
@@ -90,6 +91,10 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, id))
       .returning();
     return user;
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    await db.delete(users).where(eq(users.id, id));
   }
 
   async incrementUsage(userId: string): Promise<User> {
@@ -263,6 +268,10 @@ export class MemStorage implements IStorage {
     return this.users[userIndex];
   }
 
+  async deleteUser(id: string): Promise<void> {
+    this.users = this.users.filter(u => u.id !== id);
+  }
+
   async incrementUsage(userId: string): Promise<User> {
     const userIndex = this.users.findIndex(u => u.id === userId);
     if (userIndex === -1) throw new Error('User not found');
@@ -337,6 +346,7 @@ export class MemStorage implements IStorage {
       containerId: botData.containerId || null,
       processId: botData.processId || null,
       errorMessage: botData.errorMessage || null,
+      gridfsFileId: botData.gridfsFileId || null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };

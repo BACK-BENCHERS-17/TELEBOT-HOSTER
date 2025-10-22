@@ -162,6 +162,23 @@ export default function AdminPanel() {
     },
   });
 
+  const deleteUserMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/users/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "User deleted successfully" });
+      refetchUsers();
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: error.message || "Failed to delete user", 
+        variant: "destructive" 
+      });
+    },
+  });
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     loginMutation.mutate({ username, password });
@@ -558,6 +575,19 @@ export default function AdminPanel() {
                               >
                                 <Plus className="h-4 w-4 mr-2" />
                                 Create Token
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="destructive"
+                                onClick={() => {
+                                  if (confirm(`Are you sure you want to delete ${user.firstName} ${user.lastName}?`)) {
+                                    deleteUserMutation.mutate(user.id);
+                                  }
+                                }}
+                                disabled={deleteUserMutation.isPending}
+                                data-testid={`button-delete-user-${user.id}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
                           </div>
