@@ -45,9 +45,12 @@ export default function Dashboard() {
 
   const handleLogout = async () => {
     try {
-      await apiRequest("POST", "/api/auth/logout", {});
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
       queryClient.clear();
-      setLocation("/");
+      window.location.href = "/";
     } catch (error) {
       console.error("Logout failed:", error);
       window.location.href = "/";

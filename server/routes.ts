@@ -1971,6 +1971,123 @@ export async function registerRoutes(app: Express): Promise<Server> {
   return httpServer;
 }
 
+// Helper function to install bot dependencies
+async function installBotDependencies(bot: any): Promise<void> {
+  const botDirectory = bot.extractedPath!;
+  
+  // Check which dependency files exist
+  const files = await promisify(fs.readdir)(botDirectory);
+  const hasRequirementsTxt = files.some(f => f.toLowerCase() === 'requirements.txt');
+  const hasUvLock = files.some(f => f.toLowerCase() === 'uv.lock');
+  const hasPyproject = files.some(f => f.toLowerCase() === 'pyproject.toml');
+  const hasPackageJson = files.some(f => f.toLowerCase() === 'package.json');
+  
+  if (bot.runtime === 'python' && (hasRequirementsTxt || hasUvLock || hasPyproject)) {
+    const uvAvailable = isUvAvailable();
+    const useUv = uvAvailable && (hasUvLock || (hasPyproject && !hasRequirementsTxt));
+    
+    if (useUv) {
+      console.log(`[Bot ${bot.id}] Installing dependencies using uv...`);
+      await new Promise<void>((resolve, reject) => {
+        const installer = spawn('uv', ['sync'], {
+          cwd: botDirectory,
+          stdio: 'inherit',
+          env: { ...process.env }
+        });
+        
+        installer.on('error', (err) => {
+          reject(new Error(`Failed to start uv: ${err.message}`));
+        });
+        
+        installer.on('close', (code: number | null) => {
+          if (code === 0) {
+            console.log(`✓ Installed Python dependencies using uv for bot ${bot.id}`);
+            resolve();
+          } else {
+            reject(new Error(`Failed to install Python dependencies (exit code: ${code})`));
+          }
+        });
+      });
+    } else {
+      // Create virtual environment
+      const absoluteBotDir = path.resolve(botDirectory);
+      const venvPath = path.join(absoluteBotDir, '.venv');
+      console.log(`[Bot ${bot.id}] Creating virtual environment...`);
+      
+      await new Promise<void>((resolve, reject) => {
+        const venv = spawn('python3', ['-m', 'venv', '.venv'], {
+          cwd: absoluteBotDir,
+          stdio: 'inherit'
+        });
+        
+        venv.on('error', (err) => {
+          reject(new Error(`Failed to start venv creation: ${err.message}`));
+        });
+        
+        venv.on('close', (code: number | null) => {
+          if (code === 0) {
+            resolve();
+          } else {
+            reject(new Error(`Failed to create virtual environment (exit code: ${code})`));
+          }
+        });
+      });
+      
+      // Install dependencies
+      console.log(`[Bot ${bot.id}] Installing dependencies using pip...`);
+      const pythonPath = path.resolve(path.join(venvPath, 'bin', 'python'));
+      
+      if (!fs.existsSync(pythonPath)) {
+        throw new Error(`Virtual environment Python not found at ${pythonPath}`);
+      }
+      
+      await new Promise<void>((resolve, reject) => {
+        const installer = spawn(pythonPath, ['-m', 'pip', 'install', '--no-user', '-r', 'requirements.txt'], {
+          cwd: absoluteBotDir,
+          stdio: 'inherit',
+          env: { ...process.env, PIP_USER: '0' }
+        });
+        
+        installer.on('error', (err) => {
+          reject(new Error(`Failed to start pip: ${err.message}`));
+        });
+        
+        installer.on('close', (code: number | null) => {
+          if (code === 0) {
+            console.log(`✓ Installed Python dependencies for bot ${bot.id}`);
+            resolve();
+          } else {
+            reject(new Error(`Failed to install Python dependencies (exit code: ${code})`));
+          }
+        });
+      });
+    }
+  }
+  
+  if (bot.runtime === 'nodejs' && hasPackageJson) {
+    console.log(`[Bot ${bot.id}] Installing dependencies using npm...`);
+    await new Promise<void>((resolve, reject) => {
+      const npm = spawn('npm', ['install'], {
+        cwd: botDirectory,
+        stdio: 'inherit'
+      });
+      
+      npm.on('error', (err) => {
+        reject(new Error(`Failed to start npm: ${err.message}`));
+      });
+      
+      npm.on('close', (code: number | null) => {
+        if (code === 0) {
+          console.log(`✓ Installed Node.js dependencies for bot ${bot.id}`);
+          resolve();
+        } else {
+          reject(new Error(`Failed to install Node.js dependencies (exit code: ${code})`));
+        }
+      });
+    });
+  }
+}
+
 // Helper function to ensure bot files are restored from GridFS if needed
 async function ensureBotFilesExist(bot: any) {
   if (!bot.extractedPath) {
@@ -2023,6 +2140,11 @@ async function ensureBotFilesExist(bot: any) {
       await unlinkAsync(tempZipPath);
       
       console.log(`✅ Bot ${bot.id} files restored from GridFS`);
+      
+      // Install dependencies after restoring files
+      console.log(`[Bot ${bot.id}] Installing packages...`);
+      await installBotDependencies(bot);
+      console.log(`✅ Bot ${bot.id} packages installed successfully`);
     } catch (error: any) {
       console.error(`[Bot ${bot.id}] Failed to restore files from GridFS:`, error);
       throw new Error(`Failed to restore bot files from database: ${error.message}`);
