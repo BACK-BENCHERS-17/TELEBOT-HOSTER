@@ -70,6 +70,108 @@ const botProcesses = new Map<number, any>();
 // WebSocket clients for log streaming
 const wsClients = new Map<string, Set<WebSocket>>();
 
+// Track package installation attempts to prevent infinite loops
+const packageInstallAttempts = new Map<number, Set<string>>();
+
+// Buffer for collecting stderr to detect import errors
+const stderrBuffer = new Map<number, string[]>();
+
+// Helper function to extract missing package name from Python error messages
+function extractMissingPackage(errorMessage: string): string | null {
+  // Pattern 1: ModuleNotFoundError: No module named 'package_name'
+  let match = errorMessage.match(/ModuleNotFoundError:.*?No module named ['"]([^'"]+)['"]/);
+  if (match) return match[1].split('.')[0]; // Get root package name
+  
+  // Pattern 2: ImportError: No module named package_name
+  match = errorMessage.match(/ImportError:.*?No module named ['"]?([^'"\s]+)['"]?/);
+  if (match) return match[1].split('.')[0];
+  
+  // Pattern 3: cannot import name 'X' from 'package_name'
+  match = errorMessage.match(/cannot import name.*?from ['"]([^'"]+)['"]/);
+  if (match) return match[1].split('.')[0];
+  
+  return null;
+}
+
+// Helper function to install a missing package automatically
+async function autoInstallPackage(botId: number, packageName: string, bot: any): Promise<boolean> {
+  // Check if we've already tried to install this package
+  const attemptedPackages = packageInstallAttempts.get(botId) || new Set<string>();
+  if (attemptedPackages.has(packageName)) {
+    console.log(`[Bot ${botId}] Package '${packageName}' already attempted, skipping to prevent loop`);
+    return false;
+  }
+  
+  // Mark package as attempted
+  attemptedPackages.add(packageName);
+  packageInstallAttempts.set(botId, attemptedPackages);
+  
+  console.log(`[Bot ${botId}] 🔧 Auto-installing missing package: ${packageName}`);
+  
+  try {
+    const botDirectory = bot.extractedPath!;
+    
+    if (bot.runtime === 'python') {
+      // Update requirements.txt
+      const requirementsPath = path.join(botDirectory, 'requirements.txt');
+      let requirements = '';
+      
+      if (fs.existsSync(requirementsPath)) {
+        requirements = await promisify(fs.readFile)(requirementsPath, 'utf-8');
+      }
+      
+      // Check if package already exists in requirements.txt
+      if (!requirements.split('\n').some(line => line.trim().startsWith(packageName))) {
+        requirements += `\n${packageName}`;
+        await promisify(fs.writeFile)(requirementsPath, requirements.trim() + '\n', 'utf-8');
+        console.log(`[Bot ${botId}] ✓ Added '${packageName}' to requirements.txt`);
+      }
+      
+      // Install the package
+      await new Promise<void>((resolve, reject) => {
+        const venvPython = path.join(botDirectory, '.venv', 'bin', 'python');
+        const usePython = fs.existsSync(venvPython) ? venvPython : findSystemPython();
+        
+        const installer = spawn(usePython, ['-m', 'pip', 'install', '--no-user', packageName], {
+          cwd: botDirectory,
+          stdio: 'pipe',
+          env: { ...process.env, PIP_USER: '0' }
+        });
+        
+        let installOutput = '';
+        installer.stdout?.on('data', (data) => {
+          installOutput += data.toString();
+        });
+        
+        installer.stderr?.on('data', (data) => {
+          installOutput += data.toString();
+        });
+        
+        installer.on('close', (code) => {
+          if (code === 0) {
+            console.log(`[Bot ${botId}] ✅ Successfully installed '${packageName}'`);
+            resolve();
+          } else {
+            console.error(`[Bot ${botId}] ❌ Failed to install '${packageName}': ${installOutput}`);
+            reject(new Error(`Installation failed with code ${code}`));
+          }
+        });
+        
+        installer.on('error', (err) => {
+          reject(err);
+        });
+      });
+      
+      return true;
+    }
+  } catch (error: any) {
+    console.error(`[Bot ${botId}] Error auto-installing '${packageName}':`, error.message);
+    return false;
+  }
+  
+  return false;
+}
+
 // Helper function to flatten nested folders - move all files to root level
 async function flattenExtractedFolder(extractedPath: string): Promise<void> {
   const readdirAsync = promisify(fs.readdir);
@@ -2265,9 +2367,43 @@ async function launchBot(botId: number) {
     broadcastLog(botId.toString(), log);
   });
   
-  botProcess.stderr.on('data', (data: Buffer) => {
-    const log = `[ERROR] ${data.toString()}`;
+  botProcess.stderr.on('data', async (data: Buffer) => {
+    const errorText = data.toString();
+    const log = `[ERROR] ${errorText}`;
     broadcastLog(botId.toString(), log);
+    
+    // Collect stderr for analysis
+    const buffer = stderrBuffer.get(botId) || [];
+    buffer.push(errorText);
+    stderrBuffer.set(botId, buffer);
+    
+    // Try to detect and auto-install missing packages
+    const missingPackage = extractMissingPackage(errorText);
+    if (missingPackage && bot.runtime === 'python') {
+      console.log(`[Bot ${botId}] 🔍 Detected missing package: ${missingPackage}`);
+      
+      // Stop the current bot process
+      if (botProcesses.has(botId)) {
+        botProcesses.get(botId)?.kill();
+        botProcesses.delete(botId);
+      }
+      
+      // Install the package
+      const installed = await autoInstallPackage(botId, missingPackage, bot);
+      
+      if (installed) {
+        // Restart the bot after installing the package
+        console.log(`[Bot ${botId}] 🔄 Restarting bot after installing ${missingPackage}...`);
+        setTimeout(async () => {
+          try {
+            await launchBot(botId);
+            console.log(`[Bot ${botId}] ✅ Restarted successfully after package installation`);
+          } catch (error) {
+            console.error(`[Bot ${botId}] ❌ Failed to restart after package installation:`, error);
+          }
+        }, 2000);
+      }
+    }
   });
   
   botProcess.on('exit', async (code: number | null) => {
