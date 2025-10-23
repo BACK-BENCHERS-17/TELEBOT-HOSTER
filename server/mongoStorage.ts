@@ -9,6 +9,8 @@ import type {
   InsertEnvironmentVariable,
   AccessToken,
   InsertAccessToken,
+  OTP,
+  InsertOTP,
 } from "@shared/schema";
 import type { IStorage } from "./storage";
 
@@ -18,6 +20,8 @@ const UserSchema = new mongoose.Schema({
   firstName: String,
   lastName: String,
   profileImageUrl: String,
+  telegramUsername: String,
+  telegramChatId: String,
   tier: { type: String, default: 'FREE' },
   usageCount: { type: Number, default: 0 },
   usageLimit: { type: Number, default: 5 },
@@ -62,10 +66,21 @@ const EnvironmentVariableSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now },
 });
 
+const OTPSchema = new mongoose.Schema({
+  numericId: { type: Number, unique: true, sparse: true },
+  telegramUsername: { type: String, required: true },
+  otp: { type: String, required: true },
+  token: { type: String, required: true },
+  isUsed: { type: String, default: 'false' },
+  expiresAt: { type: Date, required: true },
+  createdAt: { type: Date, default: Date.now },
+});
+
 const UserModel = mongoose.model('User', UserSchema);
 const BotModel = mongoose.model('Bot', BotSchema);
 const AccessTokenModel = mongoose.model('AccessToken', AccessTokenSchema);
 const EnvironmentVariableModel = mongoose.model('EnvironmentVariable', EnvironmentVariableSchema);
+const OTPModel = mongoose.model('OTP', OTPSchema);
 
 export class MongoStorage implements IStorage {
   private connected = false;
@@ -169,6 +184,8 @@ export class MongoStorage implements IStorage {
       firstName: rest.firstName || null,
       lastName: rest.lastName || null,
       profileImageUrl: rest.profileImageUrl || null,
+      telegramUsername: rest.telegramUsername || null,
+      telegramChatId: rest.telegramChatId || null,
       tier: rest.tier || 'FREE',
       usageCount: rest.usageCount || 0,
       usageLimit: rest.usageLimit || 5,
@@ -187,6 +204,12 @@ export class MongoStorage implements IStorage {
   async getUserByEmail(email: string): Promise<User | undefined> {
     await this.connect();
     const user = await UserModel.findOne({ email }).lean<any>();
+    return user ? this.mapUserFromMongo(user) : undefined;
+  }
+
+  async getUserByTelegramUsername(telegramUsername: string): Promise<User | undefined> {
+    await this.connect();
+    const user = await UserModel.findOne({ telegramUsername }).lean<any>();
     return user ? this.mapUserFromMongo(user) : undefined;
   }
 
@@ -442,5 +465,59 @@ export class MongoStorage implements IStorage {
       length: file.length,
       uploadDate: file.uploadDate
     }));
+  }
+
+  // OTP operations
+  private otpIdCounter = 0;
+
+  private mapOTPFromMongo(otp: any): OTP {
+    const { _id, __v, ...rest } = otp;
+    return {
+      id: rest.numericId,
+      telegramUsername: rest.telegramUsername,
+      otp: rest.otp,
+      token: rest.token,
+      isUsed: rest.isUsed || 'false',
+      expiresAt: rest.expiresAt,
+      createdAt: rest.createdAt || null,
+    };
+  }
+
+  async createOTP(otpData: InsertOTP): Promise<OTP> {
+    await this.connect();
+    const maxOtp = await OTPModel.findOne({ numericId: { $exists: true } }).sort({ numericId: -1 }).lean<any>();
+    const newId = (maxOtp?.numericId || this.otpIdCounter) + 1;
+    this.otpIdCounter = Math.max(this.otpIdCounter, newId);
+    
+    const otp = await OTPModel.create({
+      numericId: newId,
+      ...otpData
+    });
+    return this.mapOTPFromMongo(otp.toObject());
+  }
+
+  async getOTPByCode(telegramUsername: string, otpCode: string): Promise<OTP | undefined> {
+    await this.connect();
+    const otp = await OTPModel.findOne({
+      telegramUsername,
+      otp: otpCode,
+      isUsed: 'false'
+    }).lean<any>();
+    return otp ? this.mapOTPFromMongo(otp) : undefined;
+  }
+
+  async markOTPAsUsed(id: number): Promise<void> {
+    await this.connect();
+    await OTPModel.findOneAndUpdate(
+      { numericId: id },
+      { isUsed: 'true' }
+    );
+  }
+
+  async cleanExpiredOTPs(): Promise<void> {
+    await this.connect();
+    await OTPModel.deleteMany({
+      expiresAt: { $lt: new Date() }
+    });
   }
 }

@@ -36,6 +36,8 @@ export default function Landing() {
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [telegramUsername, setTelegramUsername] = useState("");
+  const [otp, setOtp] = useState("");
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [forgotDialogOpen, setForgotDialogOpen] = useState(false);
@@ -43,18 +45,41 @@ export default function Landing() {
   const [lookupFirstName, setLookupFirstName] = useState("");
   const [lookupLastName, setLookupLastName] = useState("");
   const [foundToken, setFoundToken] = useState<string | null>(null);
+  const [createTokenStep, setCreateTokenStep] = useState<'details' | 'otp' | 'success'>('details');
 
   const { data: contactInfo } = useQuery<{ contact: string }>({
     queryKey: ["/api/auth/contact-info"],
   });
 
-  const createTokenMutation = useMutation({
-    mutationFn: async (userData: { email: string; firstName: string; lastName: string }) => {
-      const res = await apiRequest("POST", "/api/public/create-token", userData);
+  const requestOTPMutation = useMutation({
+    mutationFn: async (userData: { email: string; firstName: string; lastName: string; telegramUsername: string }) => {
+      const res = await apiRequest("POST", "/api/public/request-token-otp", userData);
+      return res.json();
+    },
+    onSuccess: () => {
+      setCreateTokenStep('otp');
+      toast({
+        title: "OTP Sent!",
+        description: "Check your Telegram for the verification code.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to send OTP",
+        description: error.message || "Please check your details and try again",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const verifyOTPMutation = useMutation({
+    mutationFn: async (data: { email: string; firstName: string; lastName: string; telegramUsername: string; otp: string }) => {
+      const res = await apiRequest("POST", "/api/public/verify-token-otp", data);
       return res.json();
     },
     onSuccess: (data) => {
       setGeneratedToken(data.token);
+      setCreateTokenStep('success');
       toast({
         title: "Token created successfully!",
         description: "Your free access token has been generated.",
@@ -62,8 +87,8 @@ export default function Landing() {
     },
     onError: (error: any) => {
       toast({
-        title: "Failed to create token",
-        description: error.message || "Please try again",
+        title: "Verification failed",
+        description: error.message || "Invalid OTP code",
         variant: "destructive",
       });
     },
@@ -90,20 +115,40 @@ export default function Landing() {
     },
   });
 
-  const handleCreateToken = (e: React.FormEvent) => {
+  const handleRequestOTP = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !firstName.trim() || !lastName.trim()) {
+    if (!email.trim() || !firstName.trim() || !lastName.trim() || !telegramUsername.trim()) {
       toast({
         title: "All fields required",
-        description: "Please enter your email, first name, and last name",
+        description: "Please enter all required information",
         variant: "destructive",
       });
       return;
     }
-    createTokenMutation.mutate({ 
+    requestOTPMutation.mutate({ 
       email: email.trim(), 
       firstName: firstName.trim(), 
-      lastName: lastName.trim() 
+      lastName: lastName.trim(),
+      telegramUsername: telegramUsername.trim()
+    });
+  };
+
+  const handleVerifyOTP = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!otp.trim()) {
+      toast({
+        title: "OTP required",
+        description: "Please enter the verification code from Telegram",
+        variant: "destructive",
+      });
+      return;
+    }
+    verifyOTPMutation.mutate({
+      email: email.trim(),
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      telegramUsername: telegramUsername.trim(),
+      otp: otp.trim()
     });
   };
 
@@ -131,8 +176,12 @@ export default function Landing() {
       setEmail("");
       setFirstName("");
       setLastName("");
+      setTelegramUsername("");
+      setOtp("");
       setGeneratedToken(null);
-      createTokenMutation.reset();
+      setCreateTokenStep('details');
+      requestOTPMutation.reset();
+      verifyOTPMutation.reset();
     }
   };
 
@@ -202,12 +251,14 @@ export default function Landing() {
                     <DialogHeader>
                       <DialogTitle>Create Your Free Access Token</DialogTitle>
                       <DialogDescription>
-                        Enter your details to get instant access to the bot hosting platform
+                        {createTokenStep === 'details' && "Enter your details and Telegram username to receive an OTP"}
+                        {createTokenStep === 'otp' && "Enter the OTP code sent to your Telegram"}
+                        {createTokenStep === 'success' && "Your token has been created successfully!"}
                       </DialogDescription>
                     </DialogHeader>
                     
-                    {!generatedToken ? (
-                      <form onSubmit={handleCreateToken} className="space-y-4">
+                    {createTokenStep === 'details' && (
+                      <form onSubmit={handleRequestOTP} className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label htmlFor="firstName">First Name</Label>
@@ -246,16 +297,80 @@ export default function Landing() {
                             required
                           />
                         </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="telegramUsername">Telegram Username</Label>
+                          <Input
+                            id="telegramUsername"
+                            type="text"
+                            value={telegramUsername}
+                            onChange={(e) => setTelegramUsername(e.target.value)}
+                            placeholder="@username"
+                            data-testid="input-telegram-username"
+                            required
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Make sure you've started a chat with the bot to receive OTP
+                          </p>
+                        </div>
                         <Button
                           type="submit"
                           className="w-full"
-                          disabled={createTokenMutation.isPending}
-                          data-testid="button-submit-create-token"
+                          disabled={requestOTPMutation.isPending}
+                          data-testid="button-request-otp"
                         >
-                          {createTokenMutation.isPending ? "Creating..." : "Generate Free Token"}
+                          {requestOTPMutation.isPending ? "Sending OTP..." : "Send OTP to Telegram"}
                         </Button>
                       </form>
-                    ) : (
+                    )}
+
+                    {createTokenStep === 'otp' && (
+                      <form onSubmit={handleVerifyOTP} className="space-y-4">
+                        <div className="rounded-lg bg-card/50 p-4 border">
+                          <div className="flex items-start gap-3">
+                            <SiTelegram className="h-5 w-5 text-[#0088cc] mt-0.5" />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium mb-1">Check your Telegram</p>
+                              <p className="text-sm text-muted-foreground">
+                                We've sent a 6-digit verification code to <span className="font-medium">@{telegramUsername.replace(/^@/, '')}</span>
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="otp">Verification Code</Label>
+                          <Input
+                            id="otp"
+                            type="text"
+                            value={otp}
+                            onChange={(e) => setOtp(e.target.value)}
+                            placeholder="123456"
+                            maxLength={6}
+                            data-testid="input-otp"
+                            required
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setCreateTokenStep('details')}
+                            data-testid="button-back"
+                          >
+                            Back
+                          </Button>
+                          <Button
+                            type="submit"
+                            className="flex-1"
+                            disabled={verifyOTPMutation.isPending}
+                            data-testid="button-verify-otp"
+                          >
+                            {verifyOTPMutation.isPending ? "Verifying..." : "Verify & Create Token"}
+                          </Button>
+                        </div>
+                      </form>
+                    )}
+
+                    {createTokenStep === 'success' && generatedToken && (
                       <div className="space-y-4">
                         <div className="rounded-lg bg-card/50 p-4 border">
                           <Label className="text-sm text-muted-foreground mb-2 block">Your Access Token</Label>
@@ -529,9 +644,9 @@ export default function Landing() {
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground text-2xl font-bold">
                 1
               </div>
-              <h3 className="text-xl font-semibold">Get Access Token</h3>
+              <h3 className="text-xl font-semibold">Create Account with OTP</h3>
               <p className="text-muted-foreground">
-                Contact the developer via Telegram to receive your unique free access token.
+                Enter your details and Telegram username to receive a verification code. Complete OTP verification to get your access token.
               </p>
             </div>
 
@@ -539,9 +654,9 @@ export default function Landing() {
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground text-2xl font-bold">
                 2
               </div>
-              <h3 className="text-xl font-semibold">Upload ZIP File</h3>
+              <h3 className="text-xl font-semibold">Upload Your Bot</h3>
               <p className="text-muted-foreground">
-                Drop your bot's ZIP file, select runtime, and add environment variables.
+                Login with your token, upload your bot ZIP file, select runtime, and configure environment variables.
               </p>
             </div>
 

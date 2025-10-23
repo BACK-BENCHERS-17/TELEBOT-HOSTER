@@ -253,6 +253,10 @@ export class MemStorage implements IStorage {
     return this.users.find(u => u.email === email);
   }
 
+  async getUserByTelegramUsername(telegramUsername: string): Promise<User | undefined> {
+    return this.users.find(u => u.telegramUsername === telegramUsername);
+  }
+
   async getAllUsers(): Promise<User[]> {
     return [...this.users];
   }
@@ -264,6 +268,8 @@ export class MemStorage implements IStorage {
       firstName: userData.firstName || null,
       lastName: userData.lastName || null,
       profileImageUrl: userData.profileImageUrl || null,
+      telegramUsername: userData.telegramUsername || null,
+      telegramChatId: userData.telegramChatId || null,
       tier: userData.tier || 'FREE',
       usageCount: userData.usageCount || 0,
       usageLimit: userData.usageLimit || 5,
@@ -283,6 +289,8 @@ export class MemStorage implements IStorage {
       firstName: userData.firstName || null,
       lastName: userData.lastName || null,
       profileImageUrl: userData.profileImageUrl || null,
+      telegramUsername: userData.telegramUsername || null,
+      telegramChatId: userData.telegramChatId || null,
       tier: userData.tier || 'FREE',
       usageCount: userData.usageCount || 0,
       usageLimit: userData.usageLimit || 5,
