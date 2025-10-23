@@ -548,6 +548,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Request OTP for new token creation
+  app.post('/api/public/request-token-otp', async (req: any, res) => {
+    try {
+      const { email, firstName, lastName, telegramUsername } = req.body;
+      
+      if (!email || !firstName || !lastName || !telegramUsername) {
+        return res.status(400).json({ message: "All fields are required" });
+      }
+
+      const cleanUsername = telegramUsername.trim().replace(/^@/, '');
+
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + 10);
+      
+      const otp = generateOTP();
+      
+      await storage.createOTP({
+        telegramUsername: cleanUsername,
+        otp,
+        token: `PENDING_${email}_${Date.now()}`,
+        isUsed: 'false',
+        expiresAt,
+      });
+
+      const chatId = await import('./telegramBot').then(m => m.extractChatIdFromUsername(cleanUsername));
+      const sent = await sendOTPToTelegram(cleanUsername, otp, chatId || undefined);
+      
+      if (!sent) {
+        return res.status(500).json({ 
+          message: "Failed to send OTP to Telegram. Please ensure you've started a chat with the bot or your Telegram username is correct." 
+        });
+      }
+
+      console.log(`[Token Creation OTP] OTP sent to @${cleanUsername} for ${email}`);
+
+      res.json({ 
+        success: true,
+        message: "OTP sent to your Telegram. Please check your messages." 
+      });
+    } catch (error) {
+      console.error("Error requesting token creation OTP:", error);
+      res.status(500).json({ message: "Failed to send OTP" });
+    }
+  });
+
+  // Verify OTP and create token
+  app.post('/api/public/verify-token-otp', async (req: any, res) => {
+    try {
+      const { email, firstName, lastName, telegramUsername, otp } = req.body;
+      
+      if (!email || !firstName || !lastName || !telegramUsername || !otp) {
+        return res.status(400).json({ message: "All fields are required" });
+      }
+
+      const cleanUsername = telegramUsername.trim().replace(/^@/, '');
+
+      await storage.cleanExpiredOTPs();
+
+      const otpRecord = await storage.getOTPByCode(cleanUsername, otp.trim());
+      
+      if (!otpRecord) {
+        return res.status(401).json({ message: "Invalid or expired OTP" });
+      }
+
+      if (new Date() > otpRecord.expiresAt) {
+        return res.status(401).json({ message: "OTP has expired" });
+      }
+
+      await storage.markOTPAsUsed(otpRecord.id);
+
+      let user = await storage.getUserByEmail(email);
+      
+      if (!user) {
+        user = await storage.createUser({
+          email,
+          firstName,
+          lastName,
+          telegramUsername: cleanUsername,
+          tier: 'FREE',
+          usageCount: 0,
+          usageLimit: 5,
+          autoRestart: 'false',
+        });
+        console.log(`[Token Creation] New user created: ${email} (ID: ${user.id})`);
+      } else {
+        const tokens = await storage.getTokensByUserId(user.id);
+        const activeToken = tokens.find(t => t.isActive === 'true');
+        
+        if (activeToken) {
+          console.log(`[Token Creation] Returning existing active token for ${email}`);
+          return res.json({ 
+            token: activeToken.token,
+            message: "Account already exists. Your existing token has been retrieved."
+          });
+        }
+        
+        await storage.updateUser(user.id, { 
+          firstName, 
+          lastName, 
+          telegramUsername: cleanUsername 
+        });
+        console.log(`[Token Creation] Existing user updated: ${email} (ID: ${user.id})`);
+      }
+
+      const randomPart = nanoid(8).toUpperCase();
+      const token = `BACK-${randomPart}`;
+      
+      const accessToken = await storage.createToken({
+        token,
+        userId: user.id,
+        isActive: 'true',
+        createdBy: 'public',
+      });
+      
+      console.log(`[Token Creation] Token created for ${email}: ${token}`);
+      
+      res.json({ 
+        token: accessToken.token,
+        message: "Token created successfully"
+      });
+    } catch (error) {
+      console.error("Error verifying OTP and creating token:", error);
+      res.status(500).json({ message: "Failed to verify OTP" });
+    }
+  });
+
   // Admin login route
   app.post('/api/auth/admin-login', async (req: any, res) => {
     try {
