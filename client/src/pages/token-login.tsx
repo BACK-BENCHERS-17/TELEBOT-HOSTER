@@ -151,35 +151,35 @@ export default function TokenLogin() {
         </Link>
       </div>
 
-      <Card className="w-full max-w-lg shadow-lg">
-        <CardHeader className="space-y-6 pb-8">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-primary to-chart-2 shadow-lg">
-            <Key className="h-10 w-10 text-primary-foreground" />
+      <Card className="w-full max-w-lg shadow-2xl border-2">
+        <CardHeader className="space-y-6 pb-8 bg-gradient-to-b from-primary/5 to-transparent">
+          <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-primary via-primary to-chart-2 shadow-2xl animate-pulse">
+            <Key className="h-12 w-12 text-primary-foreground" />
           </div>
-          <div className="text-center space-y-2">
-            <CardTitle className="text-3xl font-bold bg-gradient-to-r from-primary to-chart-2 bg-clip-text text-transparent">
-              Secure Access Portal
+          <div className="text-center space-y-3">
+            <CardTitle className="text-4xl font-bold bg-gradient-to-r from-primary via-chart-2 to-primary bg-clip-text text-transparent">
+              Welcome Back
             </CardTitle>
-            <CardDescription className="text-base">
-              Enter your access token to unlock the dashboard
+            <CardDescription className="text-lg">
+              Secure token-based authentication
             </CardDescription>
           </div>
           
-          <div className="rounded-lg bg-primary/10 border border-primary/20 p-4">
+          <div className="rounded-xl bg-gradient-to-br from-primary/10 to-chart-2/10 border-2 border-primary/20 p-5 shadow-md">
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary shrink-0">
-                <SiTelegram className="h-5 w-5 text-primary-foreground" />
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary shadow-lg shrink-0">
+                <SiTelegram className="h-6 w-6 text-primary-foreground" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-semibold mb-2">First Time? Start the Bot!</p>
+                <p className="text-base font-semibold mb-2">🚀 First Time User?</p>
                 <p className="text-sm text-muted-foreground mb-3">
-                  Before using your token, start a chat with our bot:
+                  Start a chat with our bot to enable OTP verification:
                 </p>
                 <a 
                   href="https://t.me/TELEBOT_HOSTER_xBOT"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground hover-elevate active-elevate-2 text-sm font-medium"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-primary to-chart-2 text-primary-foreground hover-elevate active-elevate-2 text-sm font-semibold shadow-lg"
                   data-testid="link-start-bot"
                 >
                   <SiTelegram className="h-4 w-4" />
@@ -189,12 +189,12 @@ export default function TokenLogin() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-6 pb-6">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="token" className="text-base font-semibold flex items-center gap-2">
-                <Shield className="h-4 w-4 text-primary" />
-                Access Token
+        <CardContent className="space-y-6 pb-6 px-8">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-3">
+              <Label htmlFor="token" className="text-lg font-semibold flex items-center gap-2">
+                <Shield className="h-5 w-5 text-primary" />
+                Your Access Token
               </Label>
               <Input
                 id="token"
@@ -203,38 +203,54 @@ export default function TokenLogin() {
                 onChange={(e) => setToken(e.target.value)}
                 placeholder="BACK-XXXXXXXX"
                 data-testid="input-access-token"
-                className="font-mono text-lg h-12"
+                className="font-mono text-lg h-14 px-4 border-2 focus:border-primary transition-all"
               />
-              <p className="text-xs text-muted-foreground">
-                Your unique access token starts with BACK-
-              </p>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <div className="h-1.5 w-1.5 rounded-full bg-primary" />
+                <span>Format: BACK-XXXXXXXX (8 characters)</span>
+              </div>
             </div>
             <Button
               type="submit"
-              className="w-full h-12 text-lg"
+              className="w-full h-14 text-lg font-semibold shadow-xl bg-gradient-to-r from-primary to-chart-2 hover:from-primary/90 hover:to-chart-2/90 transition-all"
               disabled={loginMutation.isPending}
               data-testid="button-token-login"
             >
               {loginMutation.isPending ? (
-                <span className="flex items-center gap-2">
-                  <span className="h-4 w-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
-                  Logging in...
+                <span className="flex items-center gap-3">
+                  <span className="h-5 w-5 border-3 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                  Authenticating...
                 </span>
               ) : (
-                <span className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5" />
+                <span className="flex items-center gap-3">
+                  <Sparkles className="h-6 w-6" />
                   Access Dashboard
+                  <ArrowLeft className="h-5 w-5 rotate-180" />
                 </span>
               )}
             </Button>
           </form>
+          
+          <div className="pt-4">
+            <div className="flex items-center gap-4">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-xs text-muted-foreground font-medium">OR</span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+            <div className="mt-4 text-center">
+              <Link href="/">
+                <Button variant="ghost" size="sm" className="text-sm" data-testid="link-create-token">
+                  Don't have a token? Create one free →
+                </Button>
+              </Link>
+            </div>
+          </div>
         </CardContent>
-        <CardFooter className="flex flex-col gap-4 pt-2">
-          <div className="w-full h-px bg-border" />
+        <CardFooter className="flex flex-col gap-4 pt-2 px-8 pb-8 bg-gradient-to-t from-muted/20 to-transparent">
           <Dialog open={forgotDialogOpen} onOpenChange={setForgotDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" size="default" className="w-full" data-testid="button-forgot-token">
-                <Key className="h-4 w-4 mr-2" />
+              <Button variant="outline" size="lg" className="w-full border-2" data-testid="button-forgot-token">
+                <Key className="h-5 w-5 mr-2" />
                 Forgot your token?
               </Button>
             </DialogTrigger>
@@ -350,13 +366,13 @@ export default function TokenLogin() {
             </DialogContent>
           </Dialog>
           
-          <div className="text-center text-sm">
-            <p className="text-muted-foreground mb-2">Need help?</p>
+          <div className="text-center">
+            <p className="text-sm text-muted-foreground mb-3">Need assistance?</p>
             <a 
               href="https://t.me/BACK_BENCHERS_x17"
               target="_blank" 
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-primary hover:underline font-medium"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-muted hover:bg-muted/80 text-foreground font-medium text-sm transition-all hover-elevate"
               data-testid="link-footer-support"
             >
               <MessageCircle className="h-4 w-4" />

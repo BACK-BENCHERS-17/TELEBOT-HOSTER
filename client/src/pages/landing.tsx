@@ -46,9 +46,64 @@ export default function Landing() {
   const [lookupLastName, setLookupLastName] = useState("");
   const [foundToken, setFoundToken] = useState<string | null>(null);
   const [createTokenStep, setCreateTokenStep] = useState<'details' | 'otp' | 'success'>('details');
+  
+  // I Have a Token dialog states
+  const [haveTokenDialogOpen, setHaveTokenDialogOpen] = useState(false);
+  const [existingToken, setExistingToken] = useState("");
+  const [tokenTelegramUsername, setTokenTelegramUsername] = useState("");
+  const [tokenEmail, setTokenEmail] = useState("");
+  const [tokenOtp, setTokenOtp] = useState("");
+  const [tokenLoginStep, setTokenLoginStep] = useState<'token' | 'otp'>('token');
 
   const { data: contactInfo } = useQuery<{ contact: string }>({
     queryKey: ["/api/auth/contact-info"],
+  });
+
+  const requestTokenOTPMutation = useMutation({
+    mutationFn: async (data: { email: string; telegramUsername: string }) => {
+      const res = await apiRequest("POST", "/api/auth/request-otp", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      setTokenLoginStep('otp');
+      toast({
+        title: "OTP Sent!",
+        description: "Check your Telegram for the verification code.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Failed to send OTP",
+        description: error.message || "Please check your details and try again",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const verifyTokenOTPAndLoginMutation = useMutation({
+    mutationFn: async (data: { telegramUsername: string; otp: string; token: string }) => {
+      // First verify OTP
+      const otpRes = await apiRequest("POST", "/api/auth/verify-otp", data);
+      await otpRes.json();
+      
+      // Then log in with the token
+      const loginRes = await apiRequest("POST", "/api/auth/token-login", { token: data.token });
+      return loginRes.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Login Successful!",
+        description: "Welcome to your dashboard.",
+      });
+      window.location.href = "/dashboard";
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Verification failed",
+        description: error.message || "Invalid OTP code or token",
+        variant: "destructive",
+      });
+    },
   });
 
   const requestOTPMutation = useMutation({
@@ -195,6 +250,53 @@ export default function Landing() {
       setFoundToken(null);
       lookupTokenMutation.reset();
     }
+  };
+
+  const handleHaveTokenDialogChange = (open: boolean) => {
+    setHaveTokenDialogOpen(open);
+    if (!open) {
+      // Reset state when dialog closes
+      setExistingToken("");
+      setTokenTelegramUsername("");
+      setTokenEmail("");
+      setTokenOtp("");
+      setTokenLoginStep('token');
+      requestTokenOTPMutation.reset();
+      verifyTokenOTPAndLoginMutation.reset();
+    }
+  };
+
+  const handleRequestTokenOTP = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!existingToken.trim() || !tokenEmail.trim() || !tokenTelegramUsername.trim()) {
+      toast({
+        title: "All fields required",
+        description: "Please enter your token, email, and Telegram username",
+        variant: "destructive",
+      });
+      return;
+    }
+    requestTokenOTPMutation.mutate({
+      email: tokenEmail.trim(),
+      telegramUsername: tokenTelegramUsername.trim()
+    });
+  };
+
+  const handleVerifyTokenOTP = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tokenOtp.trim()) {
+      toast({
+        title: "OTP required",
+        description: "Please enter the verification code from Telegram",
+        variant: "destructive",
+      });
+      return;
+    }
+    verifyTokenOTPAndLoginMutation.mutate({
+      telegramUsername: tokenTelegramUsername.trim(),
+      otp: tokenOtp.trim(),
+      token: existingToken.trim()
+    });
   };
 
   return (
@@ -441,17 +543,152 @@ export default function Landing() {
                   </DialogContent>
                 </Dialog>
 
-                <Link href="/token-login">
-                  <Button 
-                    variant="default"
-                    size="lg" 
-                    className="px-8 py-6 text-lg bg-chart-2 hover:bg-chart-2 border-chart-2"
-                    data-testid="button-token-access"
-                  >
-                    <Key className="mr-2 h-5 w-5" />
-                    I Have a Token
-                  </Button>
-                </Link>
+                <Dialog open={haveTokenDialogOpen} onOpenChange={handleHaveTokenDialogChange}>
+                  <DialogTrigger asChild>
+                    <Button 
+                      variant="default"
+                      size="lg" 
+                      className="px-8 py-6 text-lg bg-chart-2 hover:bg-chart-2 border-chart-2"
+                      data-testid="button-token-access"
+                    >
+                      <Key className="mr-2 h-5 w-5" />
+                      I Have a Token
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent data-testid="dialog-have-token">
+                    <DialogHeader>
+                      <DialogTitle>Verify Your Access Token</DialogTitle>
+                      <DialogDescription>
+                        {tokenLoginStep === 'token' && "Enter your token and verify via OTP for secure access"}
+                        {tokenLoginStep === 'otp' && "Enter the OTP code sent to your Telegram"}
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    {tokenLoginStep === 'token' && (
+                      <form onSubmit={handleRequestTokenOTP} className="space-y-4">
+                        <div className="rounded-lg bg-primary/10 border border-primary/20 p-4">
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary shrink-0">
+                              <SiTelegram className="h-5 w-5 text-primary-foreground" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm font-semibold mb-2">Start the Bot for OTP!</p>
+                              <p className="text-sm text-muted-foreground mb-3">
+                                For security, we'll send an OTP to verify your token:
+                              </p>
+                              <a 
+                                href="https://t.me/TELEBOT_HOSTER_xBOT"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground hover-elevate active-elevate-2 text-sm font-medium"
+                                data-testid="link-start-bot-have-token"
+                              >
+                                <SiTelegram className="h-4 w-4" />
+                                Start @TELEBOT_HOSTER_xBOT
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="existingToken">Your Access Token</Label>
+                          <Input
+                            id="existingToken"
+                            type="text"
+                            value={existingToken}
+                            onChange={(e) => setExistingToken(e.target.value)}
+                            placeholder="BACK-XXXXXXXX"
+                            data-testid="input-existing-token"
+                            className="font-mono"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="tokenEmail">Email Address</Label>
+                          <Input
+                            id="tokenEmail"
+                            type="email"
+                            value={tokenEmail}
+                            onChange={(e) => setTokenEmail(e.target.value)}
+                            placeholder="your@email.com"
+                            data-testid="input-token-email"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="tokenTelegram">Telegram Username</Label>
+                          <Input
+                            id="tokenTelegram"
+                            type="text"
+                            value={tokenTelegramUsername}
+                            onChange={(e) => setTokenTelegramUsername(e.target.value)}
+                            placeholder="@username"
+                            data-testid="input-token-telegram"
+                            required
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Your Telegram username (make sure you've started the bot above)
+                          </p>
+                        </div>
+                        <Button
+                          type="submit"
+                          className="w-full"
+                          disabled={requestTokenOTPMutation.isPending}
+                          data-testid="button-request-token-otp"
+                        >
+                          {requestTokenOTPMutation.isPending ? "Sending OTP..." : "Send OTP to Verify"}
+                        </Button>
+                      </form>
+                    )}
+
+                    {tokenLoginStep === 'otp' && (
+                      <form onSubmit={handleVerifyTokenOTP} className="space-y-4">
+                        <div className="rounded-lg bg-card/50 p-4 border">
+                          <div className="flex items-start gap-3">
+                            <SiTelegram className="h-5 w-5 text-[#0088cc] mt-0.5" />
+                            <div className="flex-1">
+                              <p className="text-sm font-medium mb-1">Check your Telegram</p>
+                              <p className="text-sm text-muted-foreground">
+                                We've sent a 6-digit verification code to <span className="font-medium">@{tokenTelegramUsername.replace(/^@/, '')}</span>
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="tokenOtp">Verification Code</Label>
+                          <Input
+                            id="tokenOtp"
+                            type="text"
+                            value={tokenOtp}
+                            onChange={(e) => setTokenOtp(e.target.value)}
+                            placeholder="123456"
+                            maxLength={6}
+                            data-testid="input-token-otp"
+                            required
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setTokenLoginStep('token')}
+                            data-testid="button-token-back"
+                          >
+                            Back
+                          </Button>
+                          <Button
+                            type="submit"
+                            className="flex-1"
+                            disabled={verifyTokenOTPAndLoginMutation.isPending}
+                            data-testid="button-verify-token-otp"
+                          >
+                            {verifyTokenOTPAndLoginMutation.isPending ? "Verifying..." : "Verify & Access Dashboard"}
+                          </Button>
+                        </div>
+                      </form>
+                    )}
+                  </DialogContent>
+                </Dialog>
               </div>
 
               <Dialog open={forgotDialogOpen} onOpenChange={handleForgotDialogChange}>
