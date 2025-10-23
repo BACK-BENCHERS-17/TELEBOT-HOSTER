@@ -142,3 +142,22 @@ export const insertEnvVarSchema = createInsertSchema(environmentVariables).omit(
   createdAt: true,
   updatedAt: true,
 });
+
+// OTP table - For token recovery via Telegram
+export const otps = pgTable("otps", {
+  id: serial("id").primaryKey(),
+  telegramUsername: varchar("telegram_username", { length: 255 }).notNull(),
+  otp: varchar("otp", { length: 6 }).notNull(),
+  token: varchar("token", { length: 255 }).notNull(),
+  isUsed: varchar("is_used", { length: 10 }).notNull().default('false'),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type OTP = typeof otps.$inferSelect;
+export type InsertOTP = typeof otps.$inferInsert;
+
+export const insertOTPSchema = createInsertSchema(otps).omit({
+  id: true,
+  createdAt: true,
+});

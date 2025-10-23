@@ -4,6 +4,7 @@ import {
   bots,
   environmentVariables,
   accessTokens,
+  otps,
   type User,
   type UpsertUser,
   type Bot,
@@ -12,9 +13,11 @@ import {
   type InsertEnvironmentVariable,
   type AccessToken,
   type InsertAccessToken,
+  type OTP,
+  type InsertOTP,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, lt } from "drizzle-orm";
 
 export interface IStorage {
   // User operations
@@ -46,6 +49,12 @@ export interface IStorage {
   getEnvVarsByBotId(botId: number): Promise<EnvironmentVariable[]>;
   createEnvVar(envVar: InsertEnvironmentVariable): Promise<EnvironmentVariable>;
   deleteEnvVar(id: number): Promise<void>;
+  
+  // OTP operations
+  createOTP(otp: InsertOTP): Promise<OTP>;
+  getOTPByCode(telegramUsername: string, otpCode: string): Promise<OTP | undefined>;
+  markOTPAsUsed(id: number): Promise<void>;
+  cleanExpiredOTPs(): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -187,6 +196,34 @@ export class DatabaseStorage implements IStorage {
 
   async deleteEnvVar(id: number): Promise<void> {
     await db.delete(environmentVariables).where(eq(environmentVariables.id, id));
+  }
+
+  // OTP operations
+  async createOTP(otpData: InsertOTP): Promise<OTP> {
+    const [otp] = await db.insert(otps).values(otpData).returning();
+    return otp;
+  }
+
+  async getOTPByCode(telegramUsername: string, otpCode: string): Promise<OTP | undefined> {
+    const [otp] = await db
+      .select()
+      .from(otps)
+      .where(
+        and(
+          eq(otps.telegramUsername, telegramUsername),
+          eq(otps.otp, otpCode),
+          eq(otps.isUsed, 'false')
+        )
+      );
+    return otp;
+  }
+
+  async markOTPAsUsed(id: number): Promise<void> {
+    await db.update(otps).set({ isUsed: 'true' }).where(eq(otps.id, id));
+  }
+
+  async cleanExpiredOTPs(): Promise<void> {
+    await db.delete(otps).where(lt(otps.expiresAt, new Date()));
   }
 }
 
@@ -390,6 +427,42 @@ export class MemStorage implements IStorage {
 
   async deleteEnvVar(id: number): Promise<void> {
     this.envVars = this.envVars.filter(e => e.id !== id);
+  }
+
+  // OTP operations
+  private otps: OTP[] = [];
+  private otpIdCounter = 0;
+
+  async createOTP(otpData: InsertOTP): Promise<OTP> {
+    const otp: OTP = {
+      id: ++this.otpIdCounter,
+      telegramUsername: otpData.telegramUsername,
+      otp: otpData.otp,
+      token: otpData.token,
+      isUsed: otpData.isUsed || 'false',
+      expiresAt: otpData.expiresAt,
+      createdAt: new Date(),
+    };
+    this.otps.push(otp);
+    return otp;
+  }
+
+  async getOTPByCode(telegramUsername: string, otpCode: string): Promise<OTP | undefined> {
+    return this.otps.find(
+      o => o.telegramUsername === telegramUsername && o.otp === otpCode && o.isUsed === 'false'
+    );
+  }
+
+  async markOTPAsUsed(id: number): Promise<void> {
+    const otpIndex = this.otps.findIndex(o => o.id === id);
+    if (otpIndex !== -1) {
+      this.otps[otpIndex].isUsed = 'true';
+    }
+  }
+
+  async cleanExpiredOTPs(): Promise<void> {
+    const now = new Date();
+    this.otps = this.otps.filter(o => o.expiresAt > now);
   }
 }
 
