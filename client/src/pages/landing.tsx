@@ -259,6 +259,33 @@ export default function Landing() {
                     
                     {createTokenStep === 'details' && (
                       <form onSubmit={handleRequestOTP} className="space-y-4">
+                        <div className="rounded-lg bg-primary/10 border border-primary/20 p-4">
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary shrink-0">
+                              <SiTelegram className="h-5 w-5 text-primary-foreground" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm font-semibold mb-2">Important: Start the Bot First!</p>
+                              <p className="text-sm text-muted-foreground mb-3">
+                                Before creating your token, you must start a chat with our bot:
+                              </p>
+                              <a 
+                                href="https://t.me/TELEBOT_HOSTER_xBOT"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground hover-elevate active-elevate-2 text-sm font-medium"
+                                data-testid="link-start-bot"
+                              >
+                                <SiTelegram className="h-4 w-4" />
+                                Start @TELEBOT_HOSTER_xBOT
+                              </a>
+                              <p className="text-xs text-muted-foreground mt-2">
+                                Click the button above, then send /start to the bot
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label htmlFor="firstName">First Name</Label>
@@ -309,7 +336,7 @@ export default function Landing() {
                             required
                           />
                           <p className="text-xs text-muted-foreground">
-                            Make sure you've started a chat with the bot to receive OTP
+                            Your Telegram username (make sure you've started the bot above)
                           </p>
                         </div>
                         <Button
@@ -447,6 +474,30 @@ export default function Landing() {
                   
                   {!foundToken ? (
                     <form onSubmit={handleLookupToken} className="space-y-4">
+                      <div className="rounded-lg bg-primary/10 border border-primary/20 p-4">
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary shrink-0">
+                            <SiTelegram className="h-5 w-5 text-primary-foreground" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-semibold mb-2">Reminder: Have You Started the Bot?</p>
+                            <p className="text-sm text-muted-foreground mb-3">
+                              Make sure you've started a chat with our bot:
+                            </p>
+                            <a 
+                              href="https://t.me/TELEBOT_HOSTER_xBOT"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground hover-elevate active-elevate-2 text-sm font-medium"
+                              data-testid="link-start-bot-forgot-landing"
+                            >
+                              <SiTelegram className="h-4 w-4" />
+                              Start @TELEBOT_HOSTER_xBOT
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label htmlFor="lookupFirstName">First Name</Label>
