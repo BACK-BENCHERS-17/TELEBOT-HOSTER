@@ -31,6 +31,8 @@ export const users = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
+  telegramUsername: varchar("telegram_username", { length: 255 }),
+  telegramChatId: varchar("telegram_chat_id", { length: 255 }),
   tier: varchar("tier", { length: 20 }).notNull().default('FREE'),
   usageCount: integer("usage_count").notNull().default(0),
   usageLimit: integer("usage_limit").notNull().default(5),
