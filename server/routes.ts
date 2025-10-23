@@ -14,6 +14,7 @@ import { setupAuth, isAuthenticated, isAdmin } from "./tokenAuth";
 import { ADMIN_CREDENTIALS, DEVELOPER_CONTACT } from "./adminConfig";
 import { insertBotSchema, insertEnvVarSchema, insertAccessTokenSchema } from "@shared/schema";
 import { nanoid } from "nanoid";
+import { generateOTP, sendOTPToTelegram, sendTokenRecoveryInstructions } from "./telegramBot";
 
 const unlinkAsync = promisify(fs.unlink);
 const mkdirAsync = promisify(fs.mkdir);
@@ -622,6 +623,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error processing token request:", error);
       res.status(500).json({ message: "Failed to process token request" });
+    }
+  });
+
+  // Request OTP for token recovery
+  app.post('/api/auth/request-otp', async (req, res) => {
+    try {
+      const { telegramUsername, email } = req.body;
+      
+      if (!telegramUsername || !email) {
+        return res.status(400).json({ message: "Telegram username and email are required" });
+      }
+
+      // Clean the username
+      const cleanUsername = telegramUsername.trim().replace(/^@/, '');
+
+      // Find user by email
+      const user = await storage.getUserByEmail(email.trim());
+      
+      if (!user) {
+        return res.status(404).json({ message: "No account found with this email" });
+      }
+
+      // Find an active token for this user
+      const tokens = await storage.getTokensByUserId(user.id);
+      const activeToken = tokens.find(t => t.isActive === 'true');
+      
+      if (!activeToken) {
+        return res.status(404).json({ message: "No active token found for this account" });
+      }
+
+      // Generate OTP
+      const otp = generateOTP();
+      
+      // Store OTP in database with 10 minute expiry
+      const expiresAt = new Date();
+      expiresAt.setMinutes(expiresAt.getMinutes() + 10);
+      
+      await storage.createOTP({
+        telegramUsername: cleanUsername,
+        otp,
+        token: activeToken.token,
+        isUsed: 'false',
+        expiresAt,
+      });
+      
+      // Send OTP via Telegram
+      const sent = await sendOTPToTelegram(cleanUsername, otp);
+      
+      if (!sent) {
+        return res.status(500).json({ 
+          message: "Failed to send OTP. Make sure you've started a chat with our bot first. Visit t.me/BACK_BENCHERS or t.me/Dpx_Army_ff_01 for assistance." 
+        });
+      }
+
+      res.json({ 
+        success: true,
+        message: "OTP sent to your Telegram. Please check your messages." 
+      });
+    } catch (error) {
+      console.error("Error requesting OTP:", error);
+      res.status(500).json({ message: "Failed to send OTP" });
+    }
+  });
+
+  // Verify OTP and recover token
+  app.post('/api/auth/verify-otp', async (req, res) => {
+    try {
+      const { telegramUsername, otp } = req.body;
+      
+      if (!telegramUsername || !otp) {
+        return res.status(400).json({ message: "Telegram username and OTP are required" });
+      }
+
+      // Clean the username
+      const cleanUsername = telegramUsername.trim().replace(/^@/, '');
+
+      // Clean expired OTPs first
+      await storage.cleanExpiredOTPs();
+
+      // Find the OTP
+      const otpRecord = await storage.getOTPByCode(cleanUsername, otp.trim());
+      
+      if (!otpRecord) {
+        return res.status(401).json({ message: "Invalid or expired OTP" });
+      }
+
+      // Check if OTP is expired
+      if (new Date() > otpRecord.expiresAt) {
+        return res.status(401).json({ message: "OTP has expired" });
+      }
+
+      // Mark OTP as used
+      await storage.markOTPAsUsed(otpRecord.id);
+
+      // Send token to user via Telegram
+      await sendTokenRecoveryInstructions(cleanUsername, otpRecord.token);
+
+      res.json({ 
+        success: true,
+        message: "Your token has been sent to your Telegram account!" 
+      });
+    } catch (error) {
+      console.error("Error verifying OTP:", error);
+      res.status(500).json({ message: "Failed to verify OTP" });
     }
   });
 
