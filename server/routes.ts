@@ -484,6 +484,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           telegramFirstName: telegramData.first_name || '',
           telegramLastName: telegramData.last_name || null,
           telegramPhotoUrl: telegramData.photo_url || null,
+          profileImageUrl: telegramData.photo_url || null,
           telegramChatId: telegramId,
           firstName: telegramData.first_name || '',
           lastName: telegramData.last_name || null,
@@ -512,6 +513,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         if (telegramData.photo_url && telegramData.photo_url !== user.telegramPhotoUrl) {
           updates.telegramPhotoUrl = telegramData.photo_url;
+          updates.profileImageUrl = telegramData.photo_url;
+        }
+        
+        // Backfill profileImageUrl for existing users who have telegramPhotoUrl but no profileImageUrl
+        // Only backfill if we're not already updating profileImageUrl with a new photo
+        if (!updates.profileImageUrl && !user.profileImageUrl && user.telegramPhotoUrl) {
+          updates.profileImageUrl = user.telegramPhotoUrl;
         }
         
         if (Object.keys(updates).length > 0) {
@@ -2422,6 +2430,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await promisify(fs.writeFile)(fullPath, content || '', 'utf-8');
       }
       
+      // Re-save bot files to GridFS to persist changes
+      try {
+        await resaveBotFilesToGridFS(bot);
+      } catch (error) {
+        console.error("Error re-saving bot files to GridFS:", error);
+        // Continue even if GridFS save fails - file is still saved locally
+      }
+      
       res.json({ message: "File created successfully" });
     } catch (error) {
       console.error("Error creating file:", error);
@@ -2467,6 +2483,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await promisify(fs.rm)(fullPath, { recursive: true, force: true });
       } else {
         await unlinkAsync(fullPath);
+      }
+      
+      // Re-save bot files to GridFS to persist changes
+      try {
+        await resaveBotFilesToGridFS(bot);
+      } catch (error) {
+        console.error("Error re-saving bot files to GridFS:", error);
+        // Continue even if GridFS save fails - file is still deleted locally
       }
       
       res.json({ message: "File deleted successfully" });
@@ -2515,6 +2539,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       await promisify(fs.rename)(fullOldPath, fullNewPath);
+      
+      // Re-save bot files to GridFS to persist changes
+      try {
+        await resaveBotFilesToGridFS(bot);
+      } catch (error) {
+        console.error("Error re-saving bot files to GridFS:", error);
+        // Continue even if GridFS save fails - file is still renamed locally
+      }
+      
       res.json({ message: "File renamed successfully" });
     } catch (error) {
       console.error("Error renaming file:", error);
@@ -2557,6 +2590,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Move uploaded file to target location
       await promisify(fs.rename)(req.file.path, fullPath);
+      
+      // Re-save bot files to GridFS to persist changes
+      try {
+        await resaveBotFilesToGridFS(bot);
+      } catch (error) {
+        console.error("Error re-saving bot files to GridFS:", error);
+        // Continue even if GridFS save fails - file is still uploaded locally
+      }
       
       res.json({ message: "File uploaded successfully", fileName });
     } catch (error) {
@@ -2679,6 +2720,70 @@ async function ensureBotFilesExist(bot: any) {
     }
   } else if (!filesExist) {
     throw new Error(`Bot files not found. Please re-upload the bot.`);
+  }
+}
+
+// Helper function to re-save bot files to GridFS after editing
+async function resaveBotFilesToGridFS(bot: any): Promise<void> {
+  if (!bot.extractedPath || !fs.existsSync(bot.extractedPath)) {
+    throw new Error("Bot files directory not found");
+  }
+
+  try {
+    console.log(`[Bot ${bot.id}] Re-saving edited files to GridFS...`);
+    
+    // Create temp ZIP file
+    const tempZipPath = path.join('uploads', `bot_${bot.id}_${Date.now()}.zip`);
+    await mkdirAsync('uploads', { recursive: true });
+    
+    // Create ZIP archive of the bot directory
+    await new Promise<void>((resolve, reject) => {
+      const output = fs.createWriteStream(tempZipPath);
+      const archive = archiver('zip', { zlib: { level: 9 } });
+
+      output.on('close', () => {
+        console.log(`[Bot ${bot.id}] Created ZIP archive (${archive.pointer()} bytes)`);
+        resolve();
+      });
+
+      archive.on('error', (err) => {
+        reject(err);
+      });
+
+      archive.pipe(output);
+      
+      // Add all files from the bot directory to the archive
+      archive.directory(bot.extractedPath, false);
+      
+      archive.finalize();
+    });
+
+    // Save new ZIP to GridFS
+    const zipStream = fs.createReadStream(tempZipPath);
+    const newGridfsFileId = await storage.saveBotFile(`${bot.name}_${Date.now()}.zip`, zipStream);
+    console.log(`[Bot ${bot.id}] Saved new ZIP to GridFS with ID: ${newGridfsFileId}`);
+
+    // Delete old GridFS file if it exists
+    if (bot.gridfsFileId) {
+      try {
+        await storage.deleteBotFile(bot.gridfsFileId);
+        console.log(`[Bot ${bot.id}] Deleted old GridFS file: ${bot.gridfsFileId}`);
+      } catch (error) {
+        console.error(`[Bot ${bot.id}] Failed to delete old GridFS file:`, error);
+        // Continue even if deletion fails
+      }
+    }
+
+    // Update bot with new GridFS file ID
+    await storage.updateBot(bot.id, { gridfsFileId: newGridfsFileId });
+
+    // Clean up temp ZIP file
+    await unlinkAsync(tempZipPath);
+    
+    console.log(`✅ Bot ${bot.id} files re-saved to GridFS successfully`);
+  } catch (error: any) {
+    console.error(`[Bot ${bot.id}] Failed to re-save files to GridFS:`, error);
+    throw new Error(`Failed to save bot files: ${error.message}`);
   }
 }
 

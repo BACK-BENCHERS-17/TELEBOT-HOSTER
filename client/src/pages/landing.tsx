@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -18,9 +19,12 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Footer } from "@/components/Footer";
 import { TelegramLoginWidget } from "@/components/TelegramLoginWidget";
+import { MiniAppConsent } from "@/components/MiniAppConsent";
 
 export default function Landing() {
   const { toast } = useToast();
+  const [showConsent, setShowConsent] = useState(false);
+  const [pendingTelegramAuth, setPendingTelegramAuth] = useState<any>(null);
 
   const { data: contactInfo } = useQuery<{ contact: string }>({
     queryKey: ["/api/auth/contact-info"],
@@ -48,7 +52,24 @@ export default function Landing() {
   });
 
   const handleTelegramAuth = (user: any) => {
-    telegramLoginMutation.mutate(user);
+    setPendingTelegramAuth(user);
+    setShowConsent(true);
+  };
+
+  const handleConsent = (allowMessages: boolean) => {
+    if (pendingTelegramAuth) {
+      telegramLoginMutation.mutate({
+        ...pendingTelegramAuth,
+        allowMessages,
+      });
+      setShowConsent(false);
+      setPendingTelegramAuth(null);
+    }
+  };
+
+  const handleCancelConsent = () => {
+    setShowConsent(false);
+    setPendingTelegramAuth(null);
   };
 
   return (
@@ -293,6 +314,11 @@ export default function Landing() {
       </section>
 
       <Footer />
+      <MiniAppConsent 
+        open={showConsent} 
+        onConsent={handleConsent}
+        onCancel={handleCancelConsent}
+      />
     </div>
   );
 }
