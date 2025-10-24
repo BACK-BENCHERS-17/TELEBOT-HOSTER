@@ -14,7 +14,8 @@ import { setupAuth, isAuthenticated, isAdmin } from "./tokenAuth";
 import { ADMIN_CREDENTIALS, DEVELOPER_CONTACT } from "./adminConfig";
 import { insertBotSchema, insertEnvVarSchema, insertAccessTokenSchema } from "@shared/schema";
 import { nanoid } from "nanoid";
-import { generateOTP, sendOTPToTelegram, sendTokenRecoveryInstructions } from "./telegramBot";
+import { generateOTP, sendOTPToTelegram, sendTokenRecoveryInstructions, sendWelcomeMessage, setMenuButton, setBotCommands } from "./telegramBot";
+import crypto from "crypto";
 
 const unlinkAsync = promisify(fs.unlink);
 const mkdirAsync = promisify(fs.mkdir);
@@ -434,6 +435,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ user });
     } catch (error) {
       console.error("Error during token login:", error);
+      res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  // Telegram login route
+  app.post('/api/auth/telegram-login', async (req: any, res) => {
+    try {
+      const telegramData = req.body;
+      
+      if (!telegramData || !telegramData.id || !telegramData.hash) {
+        return res.status(400).json({ message: "Invalid Telegram data" });
+      }
+
+      // Verify Telegram data integrity
+      const botToken = process.env.TELEGRAM_BOT_TOKEN;
+      if (!botToken) {
+        return res.status(500).json({ message: "Bot token not configured" });
+      }
+
+      const { hash, ...dataToCheck } = telegramData;
+      const dataCheckString = Object.keys(dataToCheck)
+        .sort()
+        .map(key => `${key}=${dataToCheck[key]}`)
+        .join('\n');
+
+      const secretKey = crypto.createHash('sha256').update(botToken).digest();
+      const computedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+
+      if (computedHash !== hash) {
+        return res.status(401).json({ message: "Invalid authentication data" });
+      }
+
+      // Check if auth_date is not too old (within 24 hours)
+      const authDate = parseInt(telegramData.auth_date);
+      const now = Math.floor(Date.now() / 1000);
+      if (now - authDate > 86400) {
+        return res.status(401).json({ message: "Authentication data expired" });
+      }
+
+      const telegramId = telegramData.id.toString();
+      let user = await storage.getUserByTelegramId(telegramId);
+
+      if (!user) {
+        user = await storage.createUser({
+          telegramId,
+          telegramUsername: telegramData.username || null,
+          telegramFirstName: telegramData.first_name || '',
+          telegramLastName: telegramData.last_name || null,
+          telegramPhotoUrl: telegramData.photo_url || null,
+          telegramChatId: telegramId,
+          firstName: telegramData.first_name || '',
+          lastName: telegramData.last_name || null,
+          tier: 'FREE',
+          usageCount: 0,
+          usageLimit: 5,
+          autoRestart: 'false',
+        });
+        console.log(`[Telegram Login] New user created: ${telegramData.first_name} (ID: ${user.id})`);
+        
+        // Send welcome message
+        if (telegramId) {
+          await sendWelcomeMessage(telegramId, telegramData.first_name || 'User');
+        }
+      } else {
+        // Update user's Telegram info if changed
+        const updates: any = {};
+        if (telegramData.username && telegramData.username !== user.telegramUsername) {
+          updates.telegramUsername = telegramData.username;
+        }
+        if (telegramData.first_name && telegramData.first_name !== user.telegramFirstName) {
+          updates.telegramFirstName = telegramData.first_name;
+        }
+        if (telegramData.last_name && telegramData.last_name !== user.telegramLastName) {
+          updates.telegramLastName = telegramData.last_name;
+        }
+        if (telegramData.photo_url && telegramData.photo_url !== user.telegramPhotoUrl) {
+          updates.telegramPhotoUrl = telegramData.photo_url;
+        }
+        
+        if (Object.keys(updates).length > 0) {
+          user = await storage.updateUser(user.id, updates);
+        }
+        
+        console.log(`[Telegram Login] Existing user logged in: ${telegramData.first_name} (ID: ${user.id})`);
+      }
+
+      req.session.userId = user.id;
+      req.session.save();
+
+      res.json({ user });
+    } catch (error) {
+      console.error("Error during Telegram login:", error);
       res.status(500).json({ message: "Login failed" });
     }
   });

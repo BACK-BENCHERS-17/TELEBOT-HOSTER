@@ -197,3 +197,140 @@ export async function extractChatIdFromUsername(username: string): Promise<strin
 export function generateOTP(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
+
+export async function sendWelcomeMessage(chatId: string, firstName: string): Promise<boolean> {
+  if (!TELEGRAM_BOT_TOKEN) {
+    console.error('TELEGRAM_BOT_TOKEN is not set');
+    return false;
+  }
+
+  const webAppUrl = process.env.REPLIT_DOMAINS 
+    ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
+    : 'https://telehost-kndn.onrender.com';
+
+  const message = `👋 Welcome, ${firstName}!
+
+🎉 You've successfully logged in to TELEBOT HOSTER!
+
+Here's what you can do:
+✅ Deploy Python and Node.js bots
+✅ Monitor bots with real-time logs
+✅ Manage environment variables
+✅ Auto-restart on crashes (Premium)
+
+🌐 Visit your dashboard: ${webAppUrl}
+
+Need help? Use the menu below to access your dashboard quickly!`;
+
+  try {
+    const response = await makeRequest('sendMessage', {
+      chat_id: chatId,
+      text: message,
+      parse_mode: 'Markdown',
+    });
+
+    if (response.ok) {
+      console.log(`✅ Welcome message sent to chat_id ${chatId}`);
+      return true;
+    } else {
+      console.error(`❌ Failed to send welcome message:`, response.description);
+      return false;
+    }
+  } catch (error: any) {
+    console.error('Error sending welcome message:', error.message);
+    return false;
+  }
+}
+
+export async function sendVisitNotification(chatId: string, firstName: string, action: string): Promise<boolean> {
+  if (!TELEGRAM_BOT_TOKEN) {
+    console.error('TELEGRAM_BOT_TOKEN is not set');
+    return false;
+  }
+
+  const message = `🔔 *Activity Notification*\n\nHi ${firstName}!\n\n${action}\n\n_Stay in control of your bots!_`;
+
+  try {
+    const response = await makeRequest('sendMessage', {
+      chat_id: chatId,
+      text: message,
+      parse_mode: 'Markdown',
+    });
+
+    if (response.ok) {
+      console.log(`✅ Visit notification sent to chat_id ${chatId}`);
+      return true;
+    } else {
+      console.error(`❌ Failed to send visit notification:`, response.description);
+      return false;
+    }
+  } catch (error: any) {
+    console.error('Error sending visit notification:', error.message);
+    return false;
+  }
+}
+
+export async function setMenuButton(): Promise<boolean> {
+  if (!TELEGRAM_BOT_TOKEN) {
+    console.error('TELEGRAM_BOT_TOKEN is not set');
+    return false;
+  }
+
+  const webAppUrl = process.env.REPLIT_DOMAINS 
+    ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
+    : 'https://telehost-kndn.onrender.com';
+
+  try {
+    const response = await makeRequest('setChatMenuButton', {
+      menu_button: {
+        type: 'web_app',
+        text: 'Open Dashboard',
+        web_app: {
+          url: webAppUrl
+        }
+      }
+    });
+
+    if (response.ok) {
+      console.log('✅ Menu button set successfully');
+      return true;
+    } else {
+      console.error('❌ Failed to set menu button:', response.description);
+      return false;
+    }
+  } catch (error: any) {
+    console.error('Error setting menu button:', error.message);
+    return false;
+  }
+}
+
+export async function setBotCommands(): Promise<boolean> {
+  if (!TELEGRAM_BOT_TOKEN) {
+    console.error('TELEGRAM_BOT_TOKEN is not set');
+    return false;
+  }
+
+  const commands = [
+    { command: 'start', description: 'Start the bot and get welcome message' },
+    { command: 'dashboard', description: 'Open your dashboard' },
+    { command: 'help', description: 'Get help and support' },
+    { command: 'status', description: 'Check your account status' }
+  ];
+
+  try {
+    const response = await makeRequest('setMyCommands', {
+      commands: commands
+    });
+
+    if (response.ok) {
+      console.log('✅ Bot commands set successfully');
+      return true;
+    } else {
+      console.error('❌ Failed to set bot commands:', response.description);
+      return false;
+    }
+  } catch (error: any) {
+    console.error('Error setting bot commands:', error.message);
+    return false;
+  }
+}

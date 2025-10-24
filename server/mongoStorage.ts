@@ -20,7 +20,11 @@ const UserSchema = new mongoose.Schema({
   firstName: String,
   lastName: String,
   profileImageUrl: String,
+  telegramId: { type: String, unique: true, sparse: true },
   telegramUsername: String,
+  telegramFirstName: String,
+  telegramLastName: String,
+  telegramPhotoUrl: String,
   telegramChatId: String,
   tier: { type: String, default: 'FREE' },
   usageCount: { type: Number, default: 0 },
@@ -184,7 +188,11 @@ export class MongoStorage implements IStorage {
       firstName: rest.firstName || null,
       lastName: rest.lastName || null,
       profileImageUrl: rest.profileImageUrl || null,
+      telegramId: rest.telegramId || null,
       telegramUsername: rest.telegramUsername || null,
+      telegramFirstName: rest.telegramFirstName || null,
+      telegramLastName: rest.telegramLastName || null,
+      telegramPhotoUrl: rest.telegramPhotoUrl || null,
       telegramChatId: rest.telegramChatId || null,
       tier: rest.tier || 'FREE',
       usageCount: rest.usageCount || 0,
@@ -204,6 +212,12 @@ export class MongoStorage implements IStorage {
   async getUserByEmail(email: string): Promise<User | undefined> {
     await this.connect();
     const user = await UserModel.findOne({ email }).lean<any>();
+    return user ? this.mapUserFromMongo(user) : undefined;
+  }
+
+  async getUserByTelegramId(telegramId: string): Promise<User | undefined> {
+    await this.connect();
+    const user = await UserModel.findOne({ telegramId }).lean<any>();
     return user ? this.mapUserFromMongo(user) : undefined;
   }
 
