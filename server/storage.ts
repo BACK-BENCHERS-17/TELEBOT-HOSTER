@@ -31,6 +31,7 @@ export interface IStorage {
   updateUser(id: string, updates: Partial<User>): Promise<User>;
   deleteUser(id: string): Promise<void>;
   incrementUsage(userId: string): Promise<User>;
+  decrementUsage(userId: string): Promise<User>;
   
   // Access Token operations
   getTokenByValue(token: string): Promise<AccessToken | undefined>;
@@ -123,6 +124,18 @@ export class DatabaseStorage implements IStorage {
       .update(users)
       .set({
         usageCount: sql`${users.usageCount} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
+  }
+
+  async decrementUsage(userId: string): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({
+        usageCount: sql`GREATEST(0, ${users.usageCount} - 1)`,
         updatedAt: new Date(),
       })
       .where(eq(users.id, userId))
@@ -348,6 +361,18 @@ export class MemStorage implements IStorage {
     this.users[userIndex] = {
       ...this.users[userIndex],
       usageCount: this.users[userIndex].usageCount + 1,
+      updatedAt: new Date()
+    };
+    return this.users[userIndex];
+  }
+
+  async decrementUsage(userId: string): Promise<User> {
+    const userIndex = this.users.findIndex(u => u.id === userId);
+    if (userIndex === -1) throw new Error('User not found');
+    
+    this.users[userIndex] = {
+      ...this.users[userIndex],
+      usageCount: Math.max(0, this.users[userIndex].usageCount - 1),
       updatedAt: new Date()
     };
     return this.users[userIndex];

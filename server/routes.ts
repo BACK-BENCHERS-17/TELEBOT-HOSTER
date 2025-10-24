@@ -2034,6 +2034,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Delete from database
       await storage.deleteBot(botId);
       
+      // Decrement usage count for FREE tier users
+      const user = await storage.getUser(bot.userId);
+      if (user && user.tier === 'FREE') {
+        await storage.decrementUsage(bot.userId);
+      }
+      
       res.json({ message: "Bot deleted" });
     } catch (error) {
       console.error("Error deleting bot:", error);

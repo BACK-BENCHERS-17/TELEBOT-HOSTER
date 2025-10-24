@@ -278,6 +278,22 @@ export class MongoStorage implements IStorage {
     return this.mapUserFromMongo(user);
   }
 
+  async decrementUsage(userId: string): Promise<User> {
+    await this.connect();
+    const user = await UserModel.findByIdAndUpdate(
+      userId,
+      { $inc: { usageCount: -1 }, updatedAt: new Date() },
+      { new: true }
+    ).lean<any>();
+    if (!user) throw new Error('User not found');
+    // Ensure usageCount doesn't go below 0
+    if (user.usageCount < 0) {
+      user.usageCount = 0;
+      await UserModel.findByIdAndUpdate(userId, { usageCount: 0 });
+    }
+    return this.mapUserFromMongo(user);
+  }
+
   // Access Token operations
   private mapTokenFromMongo(token: any): AccessToken {
     const { _id, __v, ...rest } = token;
