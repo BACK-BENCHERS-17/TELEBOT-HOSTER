@@ -1,17 +1,7 @@
-import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { 
   Upload, 
   Zap, 
@@ -19,14 +9,11 @@ import {
   Shield, 
   Code2, 
   Rocket,
-  Key,
-  MessageCircle,
-  Sparkles
+  MessageCircle
 } from "lucide-react";
 import { SiPython, SiNodedotjs, SiTelegram } from "react-icons/si";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { Link } from "wouter";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Footer } from "@/components/Footer";
@@ -34,271 +21,10 @@ import { TelegramLoginWidget } from "@/components/TelegramLoginWidget";
 
 export default function Landing() {
   const { toast } = useToast();
-  const [email, setEmail] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [telegramUsername, setTelegramUsername] = useState("");
-  const [otp, setOtp] = useState("");
-  const [generatedToken, setGeneratedToken] = useState<string | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [forgotDialogOpen, setForgotDialogOpen] = useState(false);
-  const [lookupEmail, setLookupEmail] = useState("");
-  const [lookupFirstName, setLookupFirstName] = useState("");
-  const [lookupLastName, setLookupLastName] = useState("");
-  const [foundToken, setFoundToken] = useState<string | null>(null);
-  const [createTokenStep, setCreateTokenStep] = useState<'details' | 'otp' | 'success'>('details');
-  
-  // I Have a Token dialog states
-  const [haveTokenDialogOpen, setHaveTokenDialogOpen] = useState(false);
-  const [existingToken, setExistingToken] = useState("");
-  const [tokenTelegramUsername, setTokenTelegramUsername] = useState("");
-  const [tokenEmail, setTokenEmail] = useState("");
-  const [tokenOtp, setTokenOtp] = useState("");
-  const [tokenLoginStep, setTokenLoginStep] = useState<'token' | 'otp'>('token');
 
   const { data: contactInfo } = useQuery<{ contact: string }>({
     queryKey: ["/api/auth/contact-info"],
   });
-
-  const requestTokenOTPMutation = useMutation({
-    mutationFn: async (data: { email: string; telegramUsername: string }) => {
-      const res = await apiRequest("POST", "/api/auth/request-otp", data);
-      return res.json();
-    },
-    onSuccess: () => {
-      setTokenLoginStep('otp');
-      toast({
-        title: "OTP Sent!",
-        description: "Check your Telegram for the verification code.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Failed to send OTP",
-        description: error.message || "Please check your details and try again",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const verifyTokenOTPAndLoginMutation = useMutation({
-    mutationFn: async (data: { telegramUsername: string; otp: string; token: string }) => {
-      // First verify OTP
-      const otpRes = await apiRequest("POST", "/api/auth/verify-otp", data);
-      await otpRes.json();
-      
-      // Then log in with the token
-      const loginRes = await apiRequest("POST", "/api/auth/token-login", { token: data.token });
-      return loginRes.json();
-    },
-    onSuccess: () => {
-      toast({
-        title: "Login Successful!",
-        description: "Welcome to your dashboard.",
-      });
-      window.location.href = "/dashboard";
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Verification failed",
-        description: error.message || "Invalid OTP code or token",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const requestOTPMutation = useMutation({
-    mutationFn: async (userData: { email: string; firstName: string; lastName: string; telegramUsername: string }) => {
-      const res = await apiRequest("POST", "/api/public/request-token-otp", userData);
-      return res.json();
-    },
-    onSuccess: () => {
-      setCreateTokenStep('otp');
-      toast({
-        title: "OTP Sent!",
-        description: "Check your Telegram for the verification code.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Failed to send OTP",
-        description: error.message || "Please check your details and try again",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const verifyOTPMutation = useMutation({
-    mutationFn: async (data: { email: string; firstName: string; lastName: string; telegramUsername: string; otp: string }) => {
-      const res = await apiRequest("POST", "/api/public/verify-token-otp", data);
-      return res.json();
-    },
-    onSuccess: (data) => {
-      setGeneratedToken(data.token);
-      setCreateTokenStep('success');
-      toast({
-        title: "Token created successfully!",
-        description: "Your free access token has been generated.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Verification failed",
-        description: error.message || "Invalid OTP code",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const lookupTokenMutation = useMutation({
-    mutationFn: async (lookupData: { email: string; firstName: string; lastName: string }) => {
-      const res = await apiRequest("POST", "/api/public/lookup-token", lookupData);
-      return res.json();
-    },
-    onSuccess: (data) => {
-      setFoundToken(data.token);
-      toast({
-        title: "Token found!",
-        description: "Your access token has been retrieved.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Token not found",
-        description: error.message || "Please check your details and try again",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const handleRequestOTP = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.trim() || !firstName.trim() || !lastName.trim() || !telegramUsername.trim()) {
-      toast({
-        title: "All fields required",
-        description: "Please enter all required information",
-        variant: "destructive",
-      });
-      return;
-    }
-    requestOTPMutation.mutate({ 
-      email: email.trim(), 
-      firstName: firstName.trim(), 
-      lastName: lastName.trim(),
-      telegramUsername: telegramUsername.trim()
-    });
-  };
-
-  const handleVerifyOTP = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!otp.trim()) {
-      toast({
-        title: "OTP required",
-        description: "Please enter the verification code from Telegram",
-        variant: "destructive",
-      });
-      return;
-    }
-    verifyOTPMutation.mutate({
-      email: email.trim(),
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      telegramUsername: telegramUsername.trim(),
-      otp: otp.trim()
-    });
-  };
-
-  const handleLookupToken = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!lookupEmail.trim() || !lookupFirstName.trim() || !lookupLastName.trim()) {
-      toast({
-        title: "All fields required",
-        description: "Please enter your email, first name, and last name",
-        variant: "destructive",
-      });
-      return;
-    }
-    lookupTokenMutation.mutate({
-      email: lookupEmail.trim(),
-      firstName: lookupFirstName.trim(),
-      lastName: lookupLastName.trim()
-    });
-  };
-
-  const handleDialogChange = (open: boolean) => {
-    setDialogOpen(open);
-    if (!open) {
-      // Reset state when dialog closes (via backdrop, ESC, or button)
-      setEmail("");
-      setFirstName("");
-      setLastName("");
-      setTelegramUsername("");
-      setOtp("");
-      setGeneratedToken(null);
-      setCreateTokenStep('details');
-      requestOTPMutation.reset();
-      verifyOTPMutation.reset();
-    }
-  };
-
-  const handleForgotDialogChange = (open: boolean) => {
-    setForgotDialogOpen(open);
-    if (!open) {
-      // Reset state when dialog closes
-      setLookupEmail("");
-      setLookupFirstName("");
-      setLookupLastName("");
-      setFoundToken(null);
-      lookupTokenMutation.reset();
-    }
-  };
-
-  const handleHaveTokenDialogChange = (open: boolean) => {
-    setHaveTokenDialogOpen(open);
-    if (!open) {
-      // Reset state when dialog closes
-      setExistingToken("");
-      setTokenTelegramUsername("");
-      setTokenEmail("");
-      setTokenOtp("");
-      setTokenLoginStep('token');
-      requestTokenOTPMutation.reset();
-      verifyTokenOTPAndLoginMutation.reset();
-    }
-  };
-
-  const handleRequestTokenOTP = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!existingToken.trim() || !tokenEmail.trim() || !tokenTelegramUsername.trim()) {
-      toast({
-        title: "All fields required",
-        description: "Please enter your token, email, and Telegram username",
-        variant: "destructive",
-      });
-      return;
-    }
-    requestTokenOTPMutation.mutate({
-      email: tokenEmail.trim(),
-      telegramUsername: tokenTelegramUsername.trim()
-    });
-  };
-
-  const handleVerifyTokenOTP = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!tokenOtp.trim()) {
-      toast({
-        title: "OTP required",
-        description: "Please enter the verification code from Telegram",
-        variant: "destructive",
-      });
-      return;
-    }
-    verifyTokenOTPAndLoginMutation.mutate({
-      telegramUsername: tokenTelegramUsername.trim(),
-      otp: tokenOtp.trim(),
-      token: existingToken.trim()
-    });
-  };
 
   const telegramLoginMutation = useMutation({
     mutationFn: async (userData: any) => {
@@ -345,8 +71,8 @@ export default function Landing() {
         <div className="container mx-auto max-w-7xl">
           <div className="text-center space-y-6">
             <div className="inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm">
-              <Key className="h-4 w-4 text-primary" />
-              <span className="text-muted-foreground">Token-Based Access</span>
+              <SiTelegram className="h-4 w-4 text-[#0088cc]" />
+              <span className="text-muted-foreground">Telegram Authentication</span>
             </div>
             
             <h1 className="text-5xl md:text-7xl font-bold tracking-tight">
@@ -354,519 +80,36 @@ export default function Landing() {
                 Host Your Telegram Bot
               </span>
               <br />
-              <span>with Secure Access</span>
+              <span>Instantly & Securely</span>
             </h1>
             
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
               Upload your Python or Node.js bot, deploy instantly, and monitor with real-time logs. 
-              Token-based authentication for enhanced security.
+              Login securely with your Telegram account.
             </p>
 
-            <div className="flex flex-col items-center justify-center gap-4 pt-4">
-              <div className="flex flex-wrap items-center justify-center gap-4">
-                <Dialog open={dialogOpen} onOpenChange={handleDialogChange}>
-                  <DialogTrigger asChild>
-                    <Button 
-                      size="lg" 
-                      className="px-8 py-6 text-lg"
-                      data-testid="button-create-token"
-                    >
-                      <Sparkles className="mr-2 h-5 w-5" />
-                      Create Free Token
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent data-testid="dialog-create-token">
-                    <DialogHeader>
-                      <DialogTitle>Create Your Free Access Token</DialogTitle>
-                      <DialogDescription>
-                        {createTokenStep === 'details' && "Enter your details and Telegram username to receive an OTP"}
-                        {createTokenStep === 'otp' && "Enter the OTP code sent to your Telegram"}
-                        {createTokenStep === 'success' && "Your token has been created successfully!"}
-                      </DialogDescription>
-                    </DialogHeader>
-                    
-                    {createTokenStep === 'details' && (
-                      <form onSubmit={handleRequestOTP} className="space-y-4">
-                        <div className="rounded-lg bg-primary/10 border border-primary/20 p-4">
-                          <div className="flex items-start gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary shrink-0">
-                              <SiTelegram className="h-5 w-5 text-primary-foreground" />
-                            </div>
-                            <div className="flex-1">
-                              <p className="text-sm font-semibold mb-2">Important: Start the Bot First!</p>
-                              <p className="text-sm text-muted-foreground mb-3">
-                                Before creating your token, you must start a chat with our bot:
-                              </p>
-                              <a 
-                                href="https://t.me/TELEBOT_HOSTER_xBOT"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground hover-elevate active-elevate-2 text-sm font-medium"
-                                data-testid="link-start-bot"
-                              >
-                                <SiTelegram className="h-4 w-4" />
-                                Start @TELEBOT_HOSTER_xBOT
-                              </a>
-                              <p className="text-xs text-muted-foreground mt-2">
-                                Click the button above, then send /start to the bot
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="firstName">First Name</Label>
-                            <Input
-                              id="firstName"
-                              type="text"
-                              value={firstName}
-                              onChange={(e) => setFirstName(e.target.value)}
-                              placeholder="John"
-                              data-testid="input-first-name"
-                              required
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="lastName">Last Name</Label>
-                            <Input
-                              id="lastName"
-                              type="text"
-                              value={lastName}
-                              onChange={(e) => setLastName(e.target.value)}
-                              placeholder="Doe"
-                              data-testid="input-last-name"
-                              required
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="email">Email Address</Label>
-                          <Input
-                            id="email"
-                            type="email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            placeholder="your@email.com"
-                            data-testid="input-email"
-                            required
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="telegramUsername">Telegram Username</Label>
-                          <Input
-                            id="telegramUsername"
-                            type="text"
-                            value={telegramUsername}
-                            onChange={(e) => setTelegramUsername(e.target.value)}
-                            placeholder="@username"
-                            data-testid="input-telegram-username"
-                            required
-                          />
-                          <p className="text-xs text-muted-foreground">
-                            Your Telegram username (make sure you've started the bot above)
-                          </p>
-                        </div>
-                        <Button
-                          type="submit"
-                          className="w-full"
-                          disabled={requestOTPMutation.isPending}
-                          data-testid="button-request-otp"
-                        >
-                          {requestOTPMutation.isPending ? "Sending OTP..." : "Send OTP to Telegram"}
-                        </Button>
-                      </form>
-                    )}
-
-                    {createTokenStep === 'otp' && (
-                      <form onSubmit={handleVerifyOTP} className="space-y-4">
-                        <div className="rounded-lg bg-card/50 p-4 border">
-                          <div className="flex items-start gap-3">
-                            <SiTelegram className="h-5 w-5 text-[#0088cc] mt-0.5" />
-                            <div className="flex-1">
-                              <p className="text-sm font-medium mb-1">Check your Telegram</p>
-                              <p className="text-sm text-muted-foreground">
-                                We've sent a 6-digit verification code to <span className="font-medium">@{telegramUsername.replace(/^@/, '')}</span>
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="otp">Verification Code</Label>
-                          <Input
-                            id="otp"
-                            type="text"
-                            value={otp}
-                            onChange={(e) => setOtp(e.target.value)}
-                            placeholder="123456"
-                            maxLength={6}
-                            data-testid="input-otp"
-                            required
-                          />
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setCreateTokenStep('details')}
-                            data-testid="button-back"
-                          >
-                            Back
-                          </Button>
-                          <Button
-                            type="submit"
-                            className="flex-1"
-                            disabled={verifyOTPMutation.isPending}
-                            data-testid="button-verify-otp"
-                          >
-                            {verifyOTPMutation.isPending ? "Verifying..." : "Verify & Create Token"}
-                          </Button>
-                        </div>
-                      </form>
-                    )}
-
-                    {createTokenStep === 'success' && generatedToken && (
-                      <div className="space-y-4">
-                        <div className="rounded-lg bg-card/50 p-4 border">
-                          <Label className="text-sm text-muted-foreground mb-2 block">Your Access Token</Label>
-                          <div className="flex items-center gap-2">
-                            <code className="flex-1 px-3 py-2 bg-background rounded text-sm font-mono" data-testid="text-generated-token">
-                              {generatedToken}
-                            </code>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                navigator.clipboard.writeText(generatedToken);
-                                toast({ title: "Token copied to clipboard!" });
-                              }}
-                              data-testid="button-copy-token"
-                            >
-                              Copy
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          Save this token securely. You'll need it to access the dashboard.
-                        </div>
-                        <div className="flex gap-2">
-                          <Link href="/token-login" className="flex-1">
-                            <Button className="w-full" data-testid="button-use-token">
-                              <Key className="mr-2 h-4 w-4" />
-                              Use Token Now
-                            </Button>
-                          </Link>
-                          <Button 
-                            variant="outline" 
-                            onClick={() => handleDialogChange(false)}
-                            data-testid="button-close-dialog"
-                          >
-                            Close
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </DialogContent>
-                </Dialog>
-
-                <Dialog open={haveTokenDialogOpen} onOpenChange={handleHaveTokenDialogChange}>
-                  <DialogTrigger asChild>
-                    <Button 
-                      variant="default"
-                      size="lg" 
-                      className="px-8 py-6 text-lg bg-chart-2 hover:bg-chart-2 border-chart-2"
-                      data-testid="button-token-access"
-                    >
-                      <Key className="mr-2 h-5 w-5" />
-                      I Have a Token
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent data-testid="dialog-have-token">
-                    <DialogHeader>
-                      <DialogTitle>Verify Your Access Token</DialogTitle>
-                      <DialogDescription>
-                        {tokenLoginStep === 'token' && "Enter your token and verify via OTP for secure access"}
-                        {tokenLoginStep === 'otp' && "Enter the OTP code sent to your Telegram"}
-                      </DialogDescription>
-                    </DialogHeader>
-
-                    {tokenLoginStep === 'token' && (
-                      <form onSubmit={handleRequestTokenOTP} className="space-y-4">
-                        <div className="rounded-lg bg-primary/10 border border-primary/20 p-4">
-                          <div className="flex items-start gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary shrink-0">
-                              <SiTelegram className="h-5 w-5 text-primary-foreground" />
-                            </div>
-                            <div className="flex-1">
-                              <p className="text-sm font-semibold mb-2">Start the Bot for OTP!</p>
-                              <p className="text-sm text-muted-foreground mb-3">
-                                For security, we'll send an OTP to verify your token:
-                              </p>
-                              <a 
-                                href="https://t.me/TELEBOT_HOSTER_xBOT"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground hover-elevate active-elevate-2 text-sm font-medium"
-                                data-testid="link-start-bot-have-token"
-                              >
-                                <SiTelegram className="h-4 w-4" />
-                                Start @TELEBOT_HOSTER_xBOT
-                              </a>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label htmlFor="existingToken">Your Access Token</Label>
-                          <Input
-                            id="existingToken"
-                            type="text"
-                            value={existingToken}
-                            onChange={(e) => setExistingToken(e.target.value)}
-                            placeholder="BACK-XXXXXXXX"
-                            data-testid="input-existing-token"
-                            className="font-mono"
-                            required
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="tokenEmail">Email Address</Label>
-                          <Input
-                            id="tokenEmail"
-                            type="email"
-                            value={tokenEmail}
-                            onChange={(e) => setTokenEmail(e.target.value)}
-                            placeholder="your@email.com"
-                            data-testid="input-token-email"
-                            required
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="tokenTelegram">Telegram Username</Label>
-                          <Input
-                            id="tokenTelegram"
-                            type="text"
-                            value={tokenTelegramUsername}
-                            onChange={(e) => setTokenTelegramUsername(e.target.value)}
-                            placeholder="@username"
-                            data-testid="input-token-telegram"
-                            required
-                          />
-                          <p className="text-xs text-muted-foreground">
-                            Your Telegram username (make sure you've started the bot above)
-                          </p>
-                        </div>
-                        <Button
-                          type="submit"
-                          className="w-full"
-                          disabled={requestTokenOTPMutation.isPending}
-                          data-testid="button-request-token-otp"
-                        >
-                          {requestTokenOTPMutation.isPending ? "Sending OTP..." : "Send OTP to Verify"}
-                        </Button>
-                      </form>
-                    )}
-
-                    {tokenLoginStep === 'otp' && (
-                      <form onSubmit={handleVerifyTokenOTP} className="space-y-4">
-                        <div className="rounded-lg bg-card/50 p-4 border">
-                          <div className="flex items-start gap-3">
-                            <SiTelegram className="h-5 w-5 text-[#0088cc] mt-0.5" />
-                            <div className="flex-1">
-                              <p className="text-sm font-medium mb-1">Check your Telegram</p>
-                              <p className="text-sm text-muted-foreground">
-                                We've sent a 6-digit verification code to <span className="font-medium">@{tokenTelegramUsername.replace(/^@/, '')}</span>
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="tokenOtp">Verification Code</Label>
-                          <Input
-                            id="tokenOtp"
-                            type="text"
-                            value={tokenOtp}
-                            onChange={(e) => setTokenOtp(e.target.value)}
-                            placeholder="123456"
-                            maxLength={6}
-                            data-testid="input-token-otp"
-                            required
-                          />
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setTokenLoginStep('token')}
-                            data-testid="button-token-back"
-                          >
-                            Back
-                          </Button>
-                          <Button
-                            type="submit"
-                            className="flex-1"
-                            disabled={verifyTokenOTPAndLoginMutation.isPending}
-                            data-testid="button-verify-token-otp"
-                          >
-                            {verifyTokenOTPAndLoginMutation.isPending ? "Verifying..." : "Verify & Access Dashboard"}
-                          </Button>
-                        </div>
-                      </form>
-                    )}
-                  </DialogContent>
-                </Dialog>
-              </div>
-
-              <div className="flex flex-col items-center gap-2">
-                <div className="flex items-center gap-2">
-                  <div className="h-px bg-border flex-1 w-12" />
-                  <span className="text-xs text-muted-foreground">or</span>
-                  <div className="h-px bg-border flex-1 w-12" />
+            <div className="flex flex-col items-center justify-center gap-6 pt-6">
+              <div className="rounded-xl bg-gradient-to-br from-primary/10 to-chart-2/10 border-2 border-primary/20 p-6 shadow-md max-w-md">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary shadow-lg">
+                    <SiTelegram className="h-8 w-8 text-primary-foreground" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-lg font-semibold mb-2">Login with Telegram</p>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Secure, instant access to your bot dashboard
+                    </p>
+                  </div>
+                  <TelegramLoginWidget 
+                    botUsername={import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "TELEBOT_HOSTER_xBOT"}
+                    onAuth={handleTelegramAuth}
+                    buttonSize="large"
+                  />
+                  <p className="text-xs text-muted-foreground text-center">
+                    By logging in, you agree to our terms and conditions
+                  </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <SiTelegram className="h-4 w-4 text-[#0088cc]" />
-                  <span className="text-sm text-muted-foreground">Login with Telegram:</span>
-                </div>
-                <TelegramLoginWidget 
-                  botUsername={import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "TELEBOT_HOSTER_xBOT"}
-                  onAuth={handleTelegramAuth}
-                />
               </div>
-
-              <Dialog open={forgotDialogOpen} onOpenChange={handleForgotDialogChange}>
-                <DialogTrigger asChild>
-                  <Button 
-                    variant="ghost"
-                    size="sm"
-                    data-testid="button-forgot-token"
-                  >
-                    Forgot your token?
-                  </Button>
-                </DialogTrigger>
-                <DialogContent data-testid="dialog-forgot-token">
-                  <DialogHeader>
-                    <DialogTitle>Retrieve Your Access Token</DialogTitle>
-                    <DialogDescription>
-                      Enter your details to find your existing access token
-                    </DialogDescription>
-                  </DialogHeader>
-                  
-                  {!foundToken ? (
-                    <form onSubmit={handleLookupToken} className="space-y-4">
-                      <div className="rounded-lg bg-primary/10 border border-primary/20 p-4">
-                        <div className="flex items-start gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary shrink-0">
-                            <SiTelegram className="h-5 w-5 text-primary-foreground" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-semibold mb-2">Reminder: Have You Started the Bot?</p>
-                            <p className="text-sm text-muted-foreground mb-3">
-                              Make sure you've started a chat with our bot:
-                            </p>
-                            <a 
-                              href="https://t.me/TELEBOT_HOSTER_xBOT"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground hover-elevate active-elevate-2 text-sm font-medium"
-                              data-testid="link-start-bot-forgot-landing"
-                            >
-                              <SiTelegram className="h-4 w-4" />
-                              Start @TELEBOT_HOSTER_xBOT
-                            </a>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="lookupFirstName">First Name</Label>
-                          <Input
-                            id="lookupFirstName"
-                            type="text"
-                            value={lookupFirstName}
-                            onChange={(e) => setLookupFirstName(e.target.value)}
-                            placeholder="John"
-                            data-testid="input-lookup-first-name"
-                            required
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="lookupLastName">Last Name</Label>
-                          <Input
-                            id="lookupLastName"
-                            type="text"
-                            value={lookupLastName}
-                            onChange={(e) => setLookupLastName(e.target.value)}
-                            placeholder="Doe"
-                            data-testid="input-lookup-last-name"
-                            required
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="lookupEmail">Email Address</Label>
-                        <Input
-                          id="lookupEmail"
-                          type="email"
-                          value={lookupEmail}
-                          onChange={(e) => setLookupEmail(e.target.value)}
-                          placeholder="your@email.com"
-                          data-testid="input-lookup-email"
-                          required
-                        />
-                      </div>
-                      <Button
-                        type="submit"
-                        className="w-full"
-                        disabled={lookupTokenMutation.isPending}
-                        data-testid="button-submit-lookup-token"
-                      >
-                        {lookupTokenMutation.isPending ? "Searching..." : "Find My Token"}
-                      </Button>
-                    </form>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="rounded-lg bg-card/50 p-4 border">
-                        <Label className="text-sm text-muted-foreground mb-2 block">Your Access Token</Label>
-                        <div className="flex items-center gap-2">
-                          <code className="flex-1 px-3 py-2 bg-background rounded text-sm font-mono" data-testid="text-found-token">
-                            {foundToken}
-                          </code>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              navigator.clipboard.writeText(foundToken);
-                              toast({ title: "Token copied to clipboard!" });
-                            }}
-                            data-testid="button-copy-found-token"
-                          >
-                            Copy
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        Use this token to access the dashboard.
-                      </div>
-                      <div className="flex gap-2">
-                        <Link href="/token-login" className="flex-1">
-                          <Button className="w-full" data-testid="button-use-found-token">
-                            <Key className="mr-2 h-4 w-4" />
-                            Use Token Now
-                          </Button>
-                        </Link>
-                        <Button 
-                          variant="outline" 
-                          onClick={() => handleForgotDialogChange(false)}
-                          data-testid="button-close-forgot-dialog"
-                        >
-                          Close
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </DialogContent>
-              </Dialog>
 
               <Card className="p-6 bg-card/50 max-w-md">
                 <div className="flex items-start gap-3">
@@ -883,6 +126,7 @@ export default function Landing() {
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex"
+                      data-testid="link-support"
                     >
                       <Badge className="bg-[#0088cc] hover:bg-[#0088cc]/90 text-white gap-2">
                         <SiTelegram className="h-4 w-4" />
@@ -974,9 +218,9 @@ export default function Landing() {
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground text-2xl font-bold">
                 1
               </div>
-              <h3 className="text-xl font-semibold">Create Account with OTP</h3>
+              <h3 className="text-xl font-semibold">Login with Telegram</h3>
               <p className="text-muted-foreground">
-                Enter your details and Telegram username to receive a verification code. Complete OTP verification to get your access token.
+                Click the Telegram login button above to securely authenticate with your Telegram account. No passwords or tokens needed.
               </p>
             </div>
 
@@ -986,7 +230,7 @@ export default function Landing() {
               </div>
               <h3 className="text-xl font-semibold">Upload Your Bot</h3>
               <p className="text-muted-foreground">
-                Login with your token, upload your bot ZIP file, select runtime, and configure environment variables.
+                Upload your bot ZIP file, select runtime (Python or Node.js), and configure environment variables.
               </p>
             </div>
 
@@ -1029,18 +273,22 @@ export default function Landing() {
         <div className="container mx-auto max-w-4xl text-center space-y-6">
           <h2 className="text-4xl font-bold">Ready to Deploy Your Bot?</h2>
           <p className="text-xl text-muted-foreground">
-            Secure, reliable bot hosting with token-based authentication.
+            Secure, reliable bot hosting with Telegram authentication.
           </p>
-          <Link href="/token-login">
+          <div className="flex flex-col items-center gap-4">
+            <p className="text-sm text-muted-foreground">
+              Scroll up to login with Telegram and get started
+            </p>
             <Button 
               size="lg" 
-              className="px-8 py-6 text-lg"
-              data-testid="button-get-started"
+              variant="outline"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              data-testid="button-scroll-to-login"
             >
-              <Key className="mr-2 h-5 w-5" />
-              Get Started with Token
+              <SiTelegram className="mr-2 h-5 w-5" />
+              Back to Login
             </Button>
-          </Link>
+          </div>
         </div>
       </section>
 

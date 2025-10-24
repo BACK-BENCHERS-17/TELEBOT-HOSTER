@@ -204,9 +204,7 @@ export async function sendWelcomeMessage(chatId: string, firstName: string): Pro
     return false;
   }
 
-  const webAppUrl = process.env.REPLIT_DOMAINS 
-    ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
-    : 'https://telehost-kndn.onrender.com';
+  const webAppUrl = 'https://telehost-kndn.onrender.com';
 
   const message = `👋 Welcome, ${firstName}!
 
@@ -276,9 +274,7 @@ export async function setMenuButton(): Promise<boolean> {
     return false;
   }
 
-  const webAppUrl = process.env.REPLIT_DOMAINS 
-    ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
-    : 'https://telehost-kndn.onrender.com';
+  const webAppUrl = 'https://telehost-kndn.onrender.com';
 
   try {
     const response = await makeRequest('setChatMenuButton', {
@@ -292,7 +288,7 @@ export async function setMenuButton(): Promise<boolean> {
     });
 
     if (response.ok) {
-      console.log('✅ Menu button set successfully');
+      console.log('✅ Menu button set successfully to', webAppUrl);
       return true;
     } else {
       console.error('❌ Failed to set menu button:', response.description);

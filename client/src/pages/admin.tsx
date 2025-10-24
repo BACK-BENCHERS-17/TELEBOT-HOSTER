@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Shield, Users, Key, Copy, Trash2, Plus, LogOut, Edit, Download, Upload, Github, Search } from "lucide-react";
+import { Shield, Users, Trash2, Plus, LogOut, Edit, Download, Upload, Github, Search } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useLocation } from "wouter";
 import { Footer } from "@/components/Footer";
@@ -23,7 +23,6 @@ export default function AdminPanel() {
   const [password, setPassword] = useState("");
   
   const [userSearch, setUserSearch] = useState("");
-  const [tokenSearch, setTokenSearch] = useState("");
 
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserFirstName, setNewUserFirstName] = useState("");
@@ -51,11 +50,6 @@ export default function AdminPanel() {
 
   const { data: users, refetch: refetchUsers } = useQuery<any[]>({
     queryKey: ["/api/admin/users"],
-    enabled: adminCheck?.isAdmin || isLoggedIn,
-  });
-
-  const { data: tokens, refetch: refetchTokens } = useQuery<any[]>({
-    queryKey: ["/api/admin/tokens"],
     enabled: adminCheck?.isAdmin || isLoggedIn,
   });
 
@@ -133,38 +127,6 @@ export default function AdminPanel() {
     },
   });
 
-  const createTokenMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      const res = await apiRequest("POST", "/api/admin/tokens", { userId });
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: "Token created successfully" });
-      refetchTokens();
-    },
-  });
-
-  const toggleTokenMutation = useMutation({
-    mutationFn: async ({ id, isActive }: { id: number; isActive: string }) => {
-      const res = await apiRequest("PATCH", `/api/admin/tokens/${id}`, { isActive });
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: "Token updated" });
-      refetchTokens();
-    },
-  });
-
-  const deleteTokenMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const res = await apiRequest("DELETE", `/api/admin/tokens/${id}`);
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: "Token deleted" });
-      refetchTokens();
-    },
-  });
 
   const deleteUserMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -222,10 +184,6 @@ export default function AdminPanel() {
     });
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast({ title: "Copied to clipboard" });
-  };
 
   // Filter users based on search
   const filteredUsers = useMemo(() => {
@@ -241,19 +199,6 @@ export default function AdminPanel() {
     );
   }, [users, userSearch]);
 
-  // Filter tokens based on search
-  const filteredTokens = useMemo(() => {
-    if (!tokens) return [];
-    if (!tokenSearch.trim()) return tokens;
-    
-    const searchLower = tokenSearch.toLowerCase();
-    return tokens.filter((token: any) => 
-      token.token?.toLowerCase().includes(searchLower) ||
-      token.user?.email?.toLowerCase().includes(searchLower) ||
-      token.user?.firstName?.toLowerCase().includes(searchLower) ||
-      token.user?.lastName?.toLowerCase().includes(searchLower)
-    );
-  }, [tokens, tokenSearch]);
 
   const handleDownloadProject = () => {
     setIsDownloading(true);
@@ -381,14 +326,10 @@ export default function AdminPanel() {
 
       <main className="container mx-auto p-6 max-w-7xl">
         <Tabs defaultValue="users" className="space-y-6">
-          <TabsList className="grid w-full max-w-2xl grid-cols-3">
+          <TabsList className="grid w-full max-w-2xl grid-cols-2">
             <TabsTrigger value="users" data-testid="tab-users">
               <Users className="h-4 w-4 mr-2" />
               Users
-            </TabsTrigger>
-            <TabsTrigger value="tokens" data-testid="tab-tokens">
-              <Key className="h-4 w-4 mr-2" />
-              Tokens
             </TabsTrigger>
             <TabsTrigger value="github" data-testid="tab-github">
               <Github className="h-4 w-4 mr-2" />
@@ -622,15 +563,6 @@ export default function AdminPanel() {
                                 <Edit className="h-4 w-4" />
                               </Button>
                               <Button
-                                size="sm"
-                                onClick={() => createTokenMutation.mutate(user.id)}
-                                disabled={createTokenMutation.isPending}
-                                data-testid={`button-create-token-${user.id}`}
-                              >
-                                <Plus className="h-4 w-4 mr-2" />
-                                Create Token
-                              </Button>
-                              <Button
                                 size="icon"
                                 variant="destructive"
                                 onClick={() => {
@@ -647,93 +579,6 @@ export default function AdminPanel() {
                           </div>
                         </>
                       )}
-                    </div>
-                    ))
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="tokens" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <CardTitle>Access Tokens</CardTitle>
-                    <CardDescription className="mt-1">
-                      {filteredTokens?.length || 0} token{filteredTokens?.length !== 1 ? 's' : ''} found
-                    </CardDescription>
-                  </div>
-                  <div className="relative w-full max-w-sm">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      placeholder="Search by token, user..."
-                      value={tokenSearch}
-                      onChange={(e) => setTokenSearch(e.target.value)}
-                      className="pl-9"
-                      data-testid="input-search-tokens"
-                    />
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {filteredTokens?.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      No tokens found matching your search
-                    </div>
-                  ) : (
-                    filteredTokens?.map((tokenData: any) => (
-                      <div
-                      key={tokenData.id}
-                      className="flex items-center justify-between p-4 rounded-lg border"
-                      data-testid={`token-${tokenData.id}`}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-2">
-                          <p className="font-medium" data-testid={`token-user-${tokenData.id}`}>
-                            {tokenData.user?.firstName} {tokenData.user?.lastName}
-                          </p>
-                          <Badge variant={tokenData.isActive === 'true' ? 'default' : 'secondary'}>
-                            {tokenData.isActive === 'true' ? 'Active' : 'Inactive'}
-                          </Badge>
-                        </div>
-                        <code className="text-sm bg-muted px-2 py-1 rounded truncate block" data-testid={`token-value-${tokenData.id}`}>
-                          {tokenData.token}
-                        </code>
-                      </div>
-                      <div className="flex items-center gap-2 ml-4">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => copyToClipboard(tokenData.token)}
-                          data-testid={`button-copy-token-${tokenData.id}`}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            toggleTokenMutation.mutate({
-                              id: tokenData.id,
-                              isActive: tokenData.isActive === 'true' ? 'false' : 'true',
-                            })
-                          }
-                          data-testid={`button-toggle-token-${tokenData.id}`}
-                        >
-                          {tokenData.isActive === 'true' ? 'Deactivate' : 'Activate'}
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => deleteTokenMutation.mutate(tokenData.id)}
-                          data-testid={`button-delete-token-${tokenData.id}`}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
                     </div>
                     ))
                   )}
