@@ -72,6 +72,19 @@ Preferred communication style: Simple, everyday language.
   - `/api/admin/*` - Admin panel operations (user/token management)
   - `/api/bots/*` - Bot CRUD operations and control (start/stop/restart)
   - `/api/bots/:id/logs` - Real-time log streaming via WebSocket upgrade
+  - `/api/telegram/webhook` - Webhook endpoint for platform Telegram bot commands
+
+**Platform Telegram Bot**
+- Command handling via webhook system (`/start`, `/dashboard`, `/help`, `/status`)
+- Menu button configured to open user dashboard directly
+- Webhook-based message processing for instant responses
+- Inline keyboard support for dashboard access
+- Functions in `server/telegramBot.ts`:
+  - `setBotCommands()` - Configures bot command list
+  - `setMenuButton()` - Sets up menu button with web app URL
+  - `setWebhook()` - Configures webhook URL for receiving updates
+  - `handleBotUpdate()` - Processes incoming messages and commands
+  - `sendMessage()` - Helper for sending formatted responses
 
 ### Data Storage Solutions
 
