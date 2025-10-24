@@ -23,6 +23,7 @@ export interface IStorage {
   // User operations
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByTelegramId(telegramId: string): Promise<User | undefined>;
   getUserByTelegramUsername(telegramUsername: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   createUser(user: Omit<UpsertUser, 'id'>): Promise<User>;
@@ -67,6 +68,11 @@ export class DatabaseStorage implements IStorage {
 
   async getUserByEmail(email: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
+  async getUserByTelegramId(telegramId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.telegramId, telegramId));
     return user;
   }
 
@@ -253,6 +259,10 @@ export class MemStorage implements IStorage {
     return this.users.find(u => u.email === email);
   }
 
+  async getUserByTelegramId(telegramId: string): Promise<User | undefined> {
+    return this.users.find(u => u.telegramId === telegramId);
+  }
+
   async getUserByTelegramUsername(telegramUsername: string): Promise<User | undefined> {
     return this.users.find(u => u.telegramUsername === telegramUsername);
   }
@@ -268,7 +278,11 @@ export class MemStorage implements IStorage {
       firstName: userData.firstName || null,
       lastName: userData.lastName || null,
       profileImageUrl: userData.profileImageUrl || null,
+      telegramId: userData.telegramId || null,
       telegramUsername: userData.telegramUsername || null,
+      telegramFirstName: userData.telegramFirstName || null,
+      telegramLastName: userData.telegramLastName || null,
+      telegramPhotoUrl: userData.telegramPhotoUrl || null,
       telegramChatId: userData.telegramChatId || null,
       tier: userData.tier || 'FREE',
       usageCount: userData.usageCount || 0,
@@ -289,7 +303,11 @@ export class MemStorage implements IStorage {
       firstName: userData.firstName || null,
       lastName: userData.lastName || null,
       profileImageUrl: userData.profileImageUrl || null,
+      telegramId: userData.telegramId || null,
       telegramUsername: userData.telegramUsername || null,
+      telegramFirstName: userData.telegramFirstName || null,
+      telegramLastName: userData.telegramLastName || null,
+      telegramPhotoUrl: userData.telegramPhotoUrl || null,
       telegramChatId: userData.telegramChatId || null,
       tier: userData.tier || 'FREE',
       usageCount: userData.usageCount || 0,
