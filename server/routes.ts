@@ -2600,6 +2600,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // Initialize Telegram bot menu and commands
+  const botToken = process.env.TELEGRAM_BOT_TOKEN;
+  const botUsername = process.env.TELEGRAM_BOT_USERNAME;
+  if (botToken && botUsername) {
+    try {
+      await setBotCommands();
+      await setMenuButton();
+      console.log('✅ Telegram bot initialized with menu and commands');
+    } catch (error) {
+      console.error('❌ Failed to initialize Telegram bot:', error);
+    }
+  }
+
   return httpServer;
 }
 

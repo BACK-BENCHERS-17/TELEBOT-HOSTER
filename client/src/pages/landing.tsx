@@ -30,6 +30,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Footer } from "@/components/Footer";
+import { TelegramLoginWidget } from "@/components/TelegramLoginWidget";
 
 export default function Landing() {
   const { toast } = useToast();
@@ -297,6 +298,14 @@ export default function Landing() {
       otp: tokenOtp.trim(),
       token: existingToken.trim()
     });
+  };
+
+  const handleTelegramLogin = () => {
+    toast({
+      title: "Login Successful!",
+      description: "Welcome to your dashboard.",
+    });
+    window.location.href = "/dashboard";
   };
 
   return (
@@ -689,6 +698,19 @@ export default function Landing() {
                     )}
                   </DialogContent>
                 </Dialog>
+              </div>
+
+              <div className="flex flex-col items-center gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="h-px bg-border flex-1 w-12" />
+                  <span className="text-xs text-muted-foreground">or</span>
+                  <div className="h-px bg-border flex-1 w-12" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <SiTelegram className="h-4 w-4 text-[#0088cc]" />
+                  <span className="text-sm text-muted-foreground">Login with Telegram:</span>
+                </div>
+                <TelegramLoginWidget onSuccess={handleTelegramLogin} />
               </div>
 
               <Dialog open={forgotDialogOpen} onOpenChange={handleForgotDialogChange}>
