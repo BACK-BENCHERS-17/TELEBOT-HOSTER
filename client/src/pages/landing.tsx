@@ -28,10 +28,7 @@ export default function Landing() {
 
   const telegramLoginMutation = useMutation({
     mutationFn: async (userData: any) => {
-      const res = await apiRequest("POST", "/api/auth/telegram-login", {
-        ...userData,
-        allowMessages: true,
-      });
+      const res = await apiRequest("POST", "/api/auth/telegram-login", userData);
       return res.json();
     },
     onSuccess: () => {
