@@ -86,6 +86,7 @@ export function DeployBotDialog({ open, onOpenChange }: DeployBotDialogProps) {
         description: "Your bot has been deployed successfully.",
       });
       queryClient.invalidateQueries({ queryKey: ['/api/bots'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
       handleClose();
     },
     onError: (error: Error) => {
