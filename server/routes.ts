@@ -14,7 +14,7 @@ import { setupAuth, isAuthenticated, isAdmin } from "./tokenAuth";
 import { ADMIN_CREDENTIALS, DEVELOPER_CONTACT } from "./adminConfig";
 import { insertBotSchema, insertEnvVarSchema, insertAccessTokenSchema } from "@shared/schema";
 import { nanoid } from "nanoid";
-import { generateOTP, sendOTPToTelegram, sendTokenRecoveryInstructions, sendWelcomeMessage, setMenuButton, setBotCommands } from "./telegramBot";
+import { generateOTP, sendOTPToTelegram, sendTokenRecoveryInstructions, sendWelcomeMessage, setMenuButton, setBotCommands, setWebhook, handleBotUpdate } from "./telegramBot";
 import crypto from "crypto";
 
 const unlinkAsync = promisify(fs.unlink);
@@ -536,6 +536,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error during Telegram login:", error);
       res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  // Telegram webhook endpoint for receiving bot updates
+  app.post('/api/telegram/webhook', async (req: any, res) => {
+    try {
+      const update = req.body;
+      
+      // Verify webhook is from Telegram (you can add additional security here)
+      if (!update || !update.update_id) {
+        return res.status(400).json({ message: "Invalid update" });
+      }
+
+      // Process the update asynchronously
+      handleBotUpdate(update).catch(error => {
+        console.error('Error processing bot update:', error);
+      });
+
+      // Always respond quickly to Telegram (within 60 seconds)
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Error in webhook endpoint:", error);
+      res.status(500).json({ message: "Webhook processing failed" });
     }
   });
 
@@ -2648,7 +2671,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       await setBotCommands();
       await setMenuButton();
-      console.log('✅ Telegram bot initialized with menu and commands');
+      
+      // Set up webhook for command handling
+      const webhookUrl = process.env.WEBHOOK_URL || 'https://telehost-kndn.onrender.com/api/telegram/webhook';
+      await setWebhook(webhookUrl);
+      
+      console.log('✅ Telegram bot initialized with menu, commands, and webhook');
     } catch (error) {
       console.error('❌ Failed to initialize Telegram bot:', error);
     }

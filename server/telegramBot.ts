@@ -330,3 +330,138 @@ export async function setBotCommands(): Promise<boolean> {
     return false;
   }
 }
+
+export async function setWebhook(webhookUrl: string): Promise<boolean> {
+  if (!TELEGRAM_BOT_TOKEN) {
+    console.error('TELEGRAM_BOT_TOKEN is not set');
+    return false;
+  }
+
+  try {
+    const response = await makeRequest('setWebhook', {
+      url: webhookUrl,
+      allowed_updates: ['message', 'callback_query']
+    });
+
+    if (response.ok) {
+      console.log('✅ Webhook set successfully to', webhookUrl);
+      return true;
+    } else {
+      console.error('❌ Failed to set webhook:', response.description);
+      return false;
+    }
+  } catch (error: any) {
+    console.error('Error setting webhook:', error.message);
+    return false;
+  }
+}
+
+export async function handleBotUpdate(update: any): Promise<void> {
+  try {
+    const message = update.message;
+    if (!message || !message.text) return;
+
+    const chatId = message.chat.id;
+    const text = message.text;
+    const firstName = message.from?.first_name || 'User';
+
+    const webAppUrl = 'https://telehost-kndn.onrender.com';
+
+    // Handle commands
+    if (text.startsWith('/start')) {
+      await sendMessage(chatId, `👋 Welcome to TELEBOT HOSTER, ${firstName}!
+
+🤖 I'm here to help you deploy and manage your Telegram bots with ease!
+
+✨ *What you can do:*
+• Deploy Python and Node.js bots
+• Monitor bots with real-time logs
+• Manage environment variables
+• Auto-restart on crashes (Premium)
+• Edit bot files directly in your browser
+
+🚀 *Get Started:*
+Click the menu button below or use /dashboard to open your dashboard!
+
+💡 *Need help?* Use /help to see all available commands.`, 'Markdown');
+
+    } else if (text.startsWith('/dashboard')) {
+      await sendMessage(chatId, `🌐 *Open Your Dashboard*
+
+Click here to access your dashboard: ${webAppUrl}
+
+Or use the menu button below! 👇`, 'Markdown', {
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '🚀 Open Dashboard', web_app: { url: webAppUrl } }
+          ]]
+        }
+      });
+
+    } else if (text.startsWith('/help')) {
+      await sendMessage(chatId, `📖 *TELEBOT HOSTER - Help Guide*
+
+*Available Commands:*
+/start - Start the bot and see welcome message
+/dashboard - Open your dashboard
+/help - Show this help message
+/status - Check your account status
+
+*Features:*
+✅ Deploy bots in seconds
+✅ Real-time log monitoring
+✅ Environment variable management
+✅ File editing in browser
+✅ Auto-restart (Premium)
+
+*Support:*
+Need assistance? Contact us at @BACK_BENCHERS_x17
+
+*Getting Started:*
+1. Use the menu button to open dashboard
+2. Deploy your first bot
+3. Monitor and manage with ease!`, 'Markdown');
+
+    } else if (text.startsWith('/status')) {
+      await sendMessage(chatId, `📊 *Account Status*
+
+To view your detailed account status, please visit your dashboard:
+
+${webAppUrl}
+
+There you can see:
+• Active bots and their status
+• Usage limits and tier
+• Bot logs and statistics
+
+Use the menu button or /dashboard to access! 👇`, 'Markdown');
+
+    } else {
+      // Default response for unknown commands
+      await sendMessage(chatId, `I didn't understand that command. 🤔
+
+Try one of these:
+/start - Get started
+/dashboard - Open dashboard
+/help - Get help
+/status - Check status
+
+Or click the menu button below! 👇`);
+    }
+  } catch (error) {
+    console.error('Error handling bot update:', error);
+  }
+}
+
+async function sendMessage(chatId: number, text: string, parseMode?: string, extra?: any): Promise<void> {
+  try {
+    await makeRequest('sendMessage', {
+      chat_id: chatId,
+      text: text,
+      parse_mode: parseMode,
+      ...extra
+    });
+  } catch (error) {
+    console.error('Error sending message:', error);
+  }
+}
