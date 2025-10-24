@@ -16,12 +16,14 @@ import {
   ChevronLeft,
   Crown
 } from "lucide-react";
+import { SiTelegram } from "react-icons/si";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import type { User } from "@shared/schema";
 import { Footer } from "@/components/Footer";
 import { MessageCircle } from "lucide-react";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 function ContactInfoQuery() {
   const { data: contactInfo } = useQuery<{ contact: string }>({
@@ -172,6 +174,53 @@ export default function Profile() {
                     />
                   </div>
                 </div>
+
+                {user?.telegramId && (
+                  <>
+                    <div className="pt-4 border-t">
+                      <div className="flex items-center gap-2 mb-4">
+                        <SiTelegram className="h-5 w-5 text-[#0088cc]" />
+                        <Label className="text-base font-semibold">Telegram Account</Label>
+                      </div>
+                      
+                      <div className="flex items-start gap-4 p-4 rounded-lg bg-[#0088cc]/5 border border-[#0088cc]/20">
+                        <Avatar className="h-16 w-16">
+                          {user.telegramPhotoUrl && (
+                            <AvatarImage src={user.telegramPhotoUrl} alt={user.telegramFirstName || "User"} />
+                          )}
+                          <AvatarFallback className="bg-[#0088cc] text-white text-lg">
+                            {user.telegramFirstName?.[0] || "T"}
+                          </AvatarFallback>
+                        </Avatar>
+                        
+                        <div className="flex-1 space-y-2">
+                          <div>
+                            <p className="text-sm text-muted-foreground">Name</p>
+                            <p className="font-medium" data-testid="text-telegram-name">
+                              {user.telegramFirstName} {user.telegramLastName || ""}
+                            </p>
+                          </div>
+                          
+                          {user.telegramUsername && (
+                            <div>
+                              <p className="text-sm text-muted-foreground">Username</p>
+                              <p className="font-medium" data-testid="text-telegram-username">
+                                @{user.telegramUsername}
+                              </p>
+                            </div>
+                          )}
+                          
+                          <div>
+                            <p className="text-sm text-muted-foreground">Telegram ID</p>
+                            <p className="font-mono text-sm" data-testid="text-telegram-id">
+                              {user.telegramId}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="pt-4 border-t">

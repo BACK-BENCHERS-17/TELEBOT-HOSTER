@@ -300,12 +300,29 @@ export default function Landing() {
     });
   };
 
-  const handleTelegramLogin = () => {
-    toast({
-      title: "Login Successful!",
-      description: "Welcome to your dashboard.",
-    });
-    window.location.href = "/dashboard";
+  const telegramLoginMutation = useMutation({
+    mutationFn: async (userData: any) => {
+      const res = await apiRequest("POST", "/api/auth/telegram-login", userData);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Login Successful!",
+        description: "Welcome to your dashboard.",
+      });
+      window.location.href = "/dashboard";
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Login failed",
+        description: error.message || "Please try again",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleTelegramAuth = (user: any) => {
+    telegramLoginMutation.mutate(user);
   };
 
   return (
@@ -710,7 +727,10 @@ export default function Landing() {
                   <SiTelegram className="h-4 w-4 text-[#0088cc]" />
                   <span className="text-sm text-muted-foreground">Login with Telegram:</span>
                 </div>
-                <TelegramLoginWidget onSuccess={handleTelegramLogin} />
+                <TelegramLoginWidget 
+                  botUsername={import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "TELEBOT_HOSTER_xBOT"}
+                  onAuth={handleTelegramAuth}
+                />
               </div>
 
               <Dialog open={forgotDialogOpen} onOpenChange={handleForgotDialogChange}>
