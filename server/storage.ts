@@ -5,6 +5,7 @@ import {
   environmentVariables,
   accessTokens,
   otps,
+  botFiles,
   type User,
   type UpsertUser,
   type Bot,
@@ -15,6 +16,8 @@ import {
   type InsertAccessToken,
   type OTP,
   type InsertOTP,
+  type BotFile,
+  type InsertBotFile,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, lt } from "drizzle-orm";
@@ -58,6 +61,11 @@ export interface IStorage {
   getOTPByCode(telegramUsername: string, otpCode: string): Promise<OTP | undefined>;
   markOTPAsUsed(id: number): Promise<void>;
   cleanExpiredOTPs(): Promise<void>;
+  
+  // Bot file operations
+  saveBotFile(botId: number, filename: string, data: Buffer): Promise<BotFile>;
+  getBotFile(botId: number): Promise<BotFile | undefined>;
+  deleteBotFile(botId: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -249,6 +257,50 @@ export class DatabaseStorage implements IStorage {
 
   async cleanExpiredOTPs(): Promise<void> {
     await db.delete(otps).where(lt(otps.expiresAt, new Date()));
+  }
+
+  // Bot file operations
+  async saveBotFile(botId: number, filename: string, data: Buffer): Promise<BotFile> {
+    const base64Data = data.toString('base64');
+    const size = data.length;
+    
+    const existingFile = await this.getBotFile(botId);
+    if (existingFile) {
+      const [updatedFile] = await db
+        .update(botFiles)
+        .set({
+          filename,
+          data: base64Data,
+          size,
+          uploadedAt: new Date(),
+        })
+        .where(eq(botFiles.botId, botId))
+        .returning();
+      return updatedFile;
+    } else {
+      const [botFile] = await db
+        .insert(botFiles)
+        .values({
+          botId,
+          filename,
+          data: base64Data,
+          size,
+        })
+        .returning();
+      return botFile;
+    }
+  }
+
+  async getBotFile(botId: number): Promise<BotFile | undefined> {
+    const [file] = await db
+      .select()
+      .from(botFiles)
+      .where(eq(botFiles.botId, botId));
+    return file;
+  }
+
+  async deleteBotFile(botId: number): Promise<void> {
+    await db.delete(botFiles).where(eq(botFiles.botId, botId));
   }
 }
 
@@ -521,10 +573,47 @@ export class MemStorage implements IStorage {
     const now = new Date();
     this.otps = this.otps.filter(o => o.expiresAt > now);
   }
+
+  // Bot file operations
+  private botFilesStore: BotFile[] = [];
+  private botFileIdCounter = 0;
+
+  async saveBotFile(botId: number, filename: string, data: Buffer): Promise<BotFile> {
+    const base64Data = data.toString('base64');
+    const size = data.length;
+    
+    const existingIndex = this.botFilesStore.findIndex(f => f.botId === botId);
+    if (existingIndex >= 0) {
+      this.botFilesStore[existingIndex] = {
+        ...this.botFilesStore[existingIndex],
+        filename,
+        data: base64Data,
+        size,
+        uploadedAt: new Date(),
+      };
+      return this.botFilesStore[existingIndex];
+    } else {
+      const botFile: BotFile = {
+        id: ++this.botFileIdCounter,
+        botId,
+        filename,
+        data: base64Data,
+        size,
+        uploadedAt: new Date(),
+      };
+      this.botFilesStore.push(botFile);
+      return botFile;
+    }
+  }
+
+  async getBotFile(botId: number): Promise<BotFile | undefined> {
+    return this.botFilesStore.find(f => f.botId === botId);
+  }
+
+  async deleteBotFile(botId: number): Promise<void> {
+    this.botFilesStore = this.botFilesStore.filter(f => f.botId !== botId);
+  }
 }
 
-// Import MongoDB storage
-import { MongoStorage } from './mongoStorage';
-
-// Use MongoDB storage
-export const storage = new MongoStorage();
+// Use PostgreSQL storage
+export const storage = new DatabaseStorage();
