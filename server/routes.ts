@@ -1894,18 +1894,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Note: If bot was created but later steps failed, we should clean it up
       // This ensures usage count and bot records stay in sync
       try {
-        // Try to find if a bot was partially created
-        const userBots = await storage.getBotsByUserId(userId);
-        const partialBot = userBots.find(b => b.name === req.body.name && b.status === 'stopped');
-        
-        if (partialBot) {
-          console.log(`[Bot Deploy] Cleaning up partially created bot ${partialBot.id}`);
-          await storage.deleteBot(partialBot.id);
+        if (req.user && req.user.id) {
+          // Try to find if a bot was partially created
+          const userBots = await storage.getBotsByUserId(req.user.id);
+          const partialBot = userBots.find(b => b.name === req.body.name && b.status === 'stopped');
           
-          // Decrement usage if it was incremented
-          const user = await storage.getUser(userId);
-          if (user && user.usageCount > 0) {
-            await storage.decrementUsage(userId);
+          if (partialBot) {
+            console.log(`[Bot Deploy] Cleaning up partially created bot ${partialBot.id}`);
+            await storage.deleteBot(partialBot.id);
+            
+            // Decrement usage if it was incremented
+            const user = await storage.getUser(req.user.id);
+            if (user && user.usageCount > 0) {
+              await storage.decrementUsage(req.user.id);
+            }
           }
         }
       } catch (cleanupError: any) {
