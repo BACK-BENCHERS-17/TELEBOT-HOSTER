@@ -7,6 +7,8 @@ import {
   varchar,
   text,
   serial,
+  bigserial,
+  bigint,
   integer,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
@@ -58,7 +60,7 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 
 // Access Tokens table - For token-based authentication
 export const accessTokens = pgTable("access_tokens", {
-  id: serial("id").primaryKey(),
+  id: bigserial("id", { mode: "string" }).primaryKey(),
   token: varchar("token", { length: 255 }).notNull().unique(),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   isActive: varchar("is_active", { length: 10 }).notNull().default('true'),
@@ -84,7 +86,7 @@ export const insertAccessTokenSchema = createInsertSchema(accessTokens).omit({
 
 // Bots table - Stores deployed Telegram bots
 export const bots = pgTable("bots", {
-  id: serial("id").primaryKey(),
+  id: bigserial("id", { mode: "string" }).primaryKey(),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"), // Optional bot description
@@ -126,8 +128,8 @@ export const insertBotSchema = createInsertSchema(bots).omit({
 
 // Environment Variables table - Stores bot secrets and config
 export const environmentVariables = pgTable("environment_variables", {
-  id: serial("id").primaryKey(),
-  botId: integer("bot_id").notNull().references(() => bots.id, { onDelete: "cascade" }),
+  id: bigserial("id", { mode: "string" }).primaryKey(),
+  botId: bigint("bot_id", { mode: "string" }).notNull().references(() => bots.id, { onDelete: "cascade" }),
   key: varchar("key", { length: 255 }).notNull(),
   value: text("value").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -152,7 +154,7 @@ export const insertEnvVarSchema = createInsertSchema(environmentVariables).omit(
 
 // OTP table - For token recovery via Telegram
 export const otps = pgTable("otps", {
-  id: serial("id").primaryKey(),
+  id: bigserial("id", { mode: "string" }).primaryKey(),
   telegramUsername: varchar("telegram_username", { length: 255 }).notNull(),
   otp: varchar("otp", { length: 6 }).notNull(),
   token: varchar("token", { length: 255 }).notNull(),
@@ -171,8 +173,8 @@ export const insertOTPSchema = createInsertSchema(otps).omit({
 
 // Bot Files table - Stores bot ZIP files in PostgreSQL (replaces GridFS)
 export const botFiles = pgTable("bot_files", {
-  id: serial("id").primaryKey(),
-  botId: integer("bot_id").notNull().references(() => bots.id, { onDelete: "cascade" }).unique(),
+  id: bigserial("id", { mode: "string" }).primaryKey(),
+  botId: bigint("bot_id", { mode: "string" }).notNull().references(() => bots.id, { onDelete: "cascade" }).unique(),
   filename: varchar("filename", { length: 255 }).notNull(),
   data: text("data").notNull(),
   size: integer("size").notNull(),
