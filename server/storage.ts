@@ -41,31 +41,31 @@ export interface IStorage {
   getTokensByUserId(userId: string): Promise<AccessToken[]>;
   getAllTokens(): Promise<AccessToken[]>;
   createToken(token: InsertAccessToken): Promise<AccessToken>;
-  updateToken(id: string, updates: Partial<AccessToken>): Promise<AccessToken>;
-  deleteToken(id: string): Promise<void>;
+  updateToken(id: number, updates: Partial<AccessToken>): Promise<AccessToken>;
+  deleteToken(id: number): Promise<void>;
   
   // Bot operations
-  getBotById(id: string): Promise<Bot | undefined>;
+  getBotById(id: number): Promise<Bot | undefined>;
   getBotsByUserId(userId: string): Promise<Bot[]>;
   createBot(bot: InsertBot): Promise<Bot>;
-  updateBot(id: string, updates: Partial<Bot>): Promise<Bot>;
-  deleteBot(id: string): Promise<void>;
+  updateBot(id: number, updates: Partial<Bot>): Promise<Bot>;
+  deleteBot(id: number): Promise<void>;
   
   // Environment variable operations
-  getEnvVarsByBotId(botId: string): Promise<EnvironmentVariable[]>;
+  getEnvVarsByBotId(botId: number): Promise<EnvironmentVariable[]>;
   createEnvVar(envVar: InsertEnvironmentVariable): Promise<EnvironmentVariable>;
-  deleteEnvVar(id: string): Promise<void>;
+  deleteEnvVar(id: number): Promise<void>;
   
   // OTP operations
   createOTP(otp: InsertOTP): Promise<OTP>;
   getOTPByCode(telegramUsername: string, otpCode: string): Promise<OTP | undefined>;
-  markOTPAsUsed(id: string): Promise<void>;
+  markOTPAsUsed(id: number): Promise<void>;
   cleanExpiredOTPs(): Promise<void>;
   
   // Bot file operations
-  saveBotFile(botId: string, filename: string, data: Buffer): Promise<BotFile>;
-  getBotFile(botId: string): Promise<BotFile | undefined>;
-  deleteBotFile(botId: string): Promise<void>;
+  saveBotFile(botId: number, filename: string, data: Buffer): Promise<BotFile>;
+  getBotFile(botId: number): Promise<BotFile | undefined>;
+  deleteBotFile(botId: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -170,7 +170,7 @@ export class DatabaseStorage implements IStorage {
     return token;
   }
 
-  async updateToken(id: string, updates: Partial<AccessToken>): Promise<AccessToken> {
+  async updateToken(id: number, updates: Partial<AccessToken>): Promise<AccessToken> {
     const [token] = await db
       .update(accessTokens)
       .set(updates)
@@ -179,12 +179,12 @@ export class DatabaseStorage implements IStorage {
     return token;
   }
 
-  async deleteToken(id: string): Promise<void> {
+  async deleteToken(id: number): Promise<void> {
     await db.delete(accessTokens).where(eq(accessTokens.id, id));
   }
 
   // Bot operations
-  async getBotById(id: string): Promise<Bot | undefined> {
+  async getBotById(id: number): Promise<Bot | undefined> {
     const [bot] = await db.select().from(bots).where(eq(bots.id, id));
     return bot;
   }
@@ -198,7 +198,7 @@ export class DatabaseStorage implements IStorage {
     return bot;
   }
 
-  async updateBot(id: string, updates: Partial<Bot>): Promise<Bot> {
+  async updateBot(id: number, updates: Partial<Bot>): Promise<Bot> {
     const [bot] = await db
       .update(bots)
       .set({ ...updates, updatedAt: new Date() })
@@ -207,12 +207,12 @@ export class DatabaseStorage implements IStorage {
     return bot;
   }
 
-  async deleteBot(id: string): Promise<void> {
+  async deleteBot(id: number): Promise<void> {
     await db.delete(bots).where(eq(bots.id, id));
   }
 
   // Environment variable operations
-  async getEnvVarsByBotId(botId: string): Promise<EnvironmentVariable[]> {
+  async getEnvVarsByBotId(botId: number): Promise<EnvironmentVariable[]> {
     return await db
       .select()
       .from(environmentVariables)
@@ -227,7 +227,7 @@ export class DatabaseStorage implements IStorage {
     return envVar;
   }
 
-  async deleteEnvVar(id: string): Promise<void> {
+  async deleteEnvVar(id: number): Promise<void> {
     await db.delete(environmentVariables).where(eq(environmentVariables.id, id));
   }
 
@@ -251,7 +251,7 @@ export class DatabaseStorage implements IStorage {
     return otp;
   }
 
-  async markOTPAsUsed(id: string): Promise<void> {
+  async markOTPAsUsed(id: number): Promise<void> {
     await db.update(otps).set({ isUsed: 'true' }).where(eq(otps.id, id));
   }
 
@@ -260,7 +260,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Bot file operations
-  async saveBotFile(botId: string, filename: string, data: Buffer): Promise<BotFile> {
+  async saveBotFile(botId: number, filename: string, data: Buffer): Promise<BotFile> {
     const base64Data = data.toString('base64');
     const size = data.length;
     
@@ -291,7 +291,7 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getBotFile(botId: string): Promise<BotFile | undefined> {
+  async getBotFile(botId: number): Promise<BotFile | undefined> {
     const [file] = await db
       .select()
       .from(botFiles)
@@ -299,7 +299,7 @@ export class DatabaseStorage implements IStorage {
     return file;
   }
 
-  async deleteBotFile(botId: string): Promise<void> {
+  async deleteBotFile(botId: number): Promise<void> {
     await db.delete(botFiles).where(eq(botFiles.botId, botId));
   }
 }
@@ -517,7 +517,7 @@ export class MemStorage implements IStorage {
   }
 
   // Environment variable operations
-  async getEnvVarsByBotId(botId: string): Promise<EnvironmentVariable[]> {
+  async getEnvVarsByBotId(botId: number): Promise<EnvironmentVariable[]> {
     return this.envVars.filter(e => e.botId === botId);
   }
 
@@ -534,7 +534,7 @@ export class MemStorage implements IStorage {
     return envVar;
   }
 
-  async deleteEnvVar(id: string): Promise<void> {
+  async deleteEnvVar(id: number): Promise<void> {
     this.envVars = this.envVars.filter(e => e.id !== id);
   }
 
@@ -562,7 +562,7 @@ export class MemStorage implements IStorage {
     );
   }
 
-  async markOTPAsUsed(id: string): Promise<void> {
+  async markOTPAsUsed(id: number): Promise<void> {
     const otpIndex = this.otps.findIndex(o => o.id === id);
     if (otpIndex !== -1) {
       this.otps[otpIndex].isUsed = 'true';
@@ -578,7 +578,7 @@ export class MemStorage implements IStorage {
   private botFilesStore: BotFile[] = [];
   private botFileIdCounter = 0;
 
-  async saveBotFile(botId: string, filename: string, data: Buffer): Promise<BotFile> {
+  async saveBotFile(botId: number, filename: string, data: Buffer): Promise<BotFile> {
     const base64Data = data.toString('base64');
     const size = data.length;
     
@@ -606,11 +606,11 @@ export class MemStorage implements IStorage {
     }
   }
 
-  async getBotFile(botId: string): Promise<BotFile | undefined> {
+  async getBotFile(botId: number): Promise<BotFile | undefined> {
     return this.botFilesStore.find(f => f.botId === botId);
   }
 
-  async deleteBotFile(botId: string): Promise<void> {
+  async deleteBotFile(botId: number): Promise<void> {
     this.botFilesStore = this.botFilesStore.filter(f => f.botId !== botId);
   }
 }
