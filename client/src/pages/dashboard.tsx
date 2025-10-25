@@ -184,14 +184,23 @@ export default function Dashboard() {
             <p className="text-muted-foreground">
               Manage and monitor your deployed Telegram bots
             </p>
-            {user?.tier === 'FREE' && (
-              <p className="text-sm text-muted-foreground mt-1" data-testid="text-usage-info">
-                Usage: <span className="font-medium">{user?.usageCount} / {user?.usageLimit}</span> deployments
-                {user.usageCount >= user.usageLimit && (
-                  <span className="text-destructive ml-2">(Limit reached)</span>
-                )}
-              </p>
-            )}
+            <p className="text-sm text-muted-foreground mt-1" data-testid="text-usage-info">
+              {user?.tier === 'FREE' ? (
+                <>
+                  Usage: <span className="font-medium">{user?.usageCount} / {user?.usageLimit}</span> deployments
+                  {user.usageCount >= user.usageLimit && (
+                    <span className="text-destructive ml-2">(Limit reached)</span>
+                  )}
+                </>
+              ) : (
+                <>
+                  Active Deployments: <span className="font-medium">{user?.usageCount}</span>
+                  {user?.usageLimit !== 999999 && (
+                    <span className="text-muted-foreground"> / {user?.usageLimit}</span>
+                  )}
+                </>
+              )}
+            </p>
           </div>
           <Button 
             size="lg"

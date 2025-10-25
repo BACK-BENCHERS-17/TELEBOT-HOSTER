@@ -550,7 +550,11 @@ export default function AdminPanel() {
                                 {user.email}
                               </p>
                               <p className="text-sm text-muted-foreground mt-1" data-testid={`user-usage-${user.id}`}>
-                                Usage: {user.usageCount} / {user.tier === 'PREMIUM' ? 'Unlimited' : user.usageLimit}
+                                {user.tier === 'PREMIUM' ? (
+                                  <>Active Deployments: {user.usageCount}</>
+                                ) : (
+                                  <>Usage: {user.usageCount} / {user.usageLimit}</>
+                                )}
                               </p>
                             </div>
                             <div className="flex gap-2">

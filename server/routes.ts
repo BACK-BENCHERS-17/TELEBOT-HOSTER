@@ -1883,10 +1883,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Increment usage count for FREE tier users
-      if (user.tier === 'FREE') {
-        await storage.incrementUsage(userId);
-      }
+      // Increment usage count for all users (both FREE and PREMIUM)
+      await storage.incrementUsage(userId);
       
       res.json(bot);
     } catch (error) {
@@ -2029,9 +2027,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Delete from database
       await storage.deleteBot(botId);
       
-      // Decrement usage count for FREE tier users
+      // Decrement usage count for all users (both FREE and PREMIUM)
       const user = await storage.getUser(bot.userId);
-      if (user && user.tier === 'FREE') {
+      if (user) {
         await storage.decrementUsage(bot.userId);
       }
       
