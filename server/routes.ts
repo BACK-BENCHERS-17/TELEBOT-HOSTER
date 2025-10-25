@@ -2630,6 +2630,98 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Download bot files as ZIP
+  app.get("/api/bots/:id/download", isAuthenticated, async (req: any, res) => {
+    try {
+      const botId = parseInt(req.params.id);
+      const bot = await storage.getBotById(botId);
+      
+      if (!bot) {
+        return res.status(404).json({ message: "Bot not found" });
+      }
+      
+      if (bot.userId !== req.user.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      if (!bot.extractedPath || !fs.existsSync(bot.extractedPath)) {
+        return res.status(404).json({ message: "Bot files not found" });
+      }
+      
+      // Create temporary ZIP file
+      const tempZipPath = path.join('uploads', `bot_${bot.id}_download_${Date.now()}.zip`);
+      await mkdirAsync('uploads', { recursive: true });
+      
+      await new Promise<void>((resolve, reject) => {
+        const output = fs.createWriteStream(tempZipPath);
+        const archive = archiver('zip', { zlib: { level: 9 } });
+
+        output.on('close', () => resolve());
+        archive.on('error', (err) => reject(err));
+
+        archive.pipe(output);
+        archive.directory(bot.extractedPath!, false);
+        archive.finalize();
+      });
+      
+      // Send ZIP file to user
+      res.download(tempZipPath, `${bot.name}.zip`, async (err) => {
+        // Clean up temp file after download
+        try {
+          await unlinkAsync(tempZipPath);
+        } catch (cleanupError) {
+          console.error('Error cleaning up temp ZIP:', cleanupError);
+        }
+        
+        if (err) {
+          console.error('Download error:', err);
+        }
+      });
+    } catch (error) {
+      console.error("Error downloading bot files:", error);
+      res.status(500).json({ message: "Failed to download bot files" });
+    }
+  });
+
+  // Send input to bot stdin (interactive console)
+  app.post("/api/bots/:id/input", isAuthenticated, async (req: any, res) => {
+    try {
+      const botId = parseInt(req.params.id);
+      const { input } = req.body;
+      
+      if (!input) {
+        return res.status(400).json({ message: "Input is required" });
+      }
+      
+      const bot = await storage.getBotById(botId);
+      
+      if (!bot) {
+        return res.status(404).json({ message: "Bot not found" });
+      }
+      
+      if (bot.userId !== req.user.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const botProcess = botProcesses.get(botId);
+      
+      if (!botProcess) {
+        return res.status(400).json({ message: "Bot is not running" });
+      }
+      
+      // Write input to bot's stdin
+      botProcess.stdin.write(input + '\n');
+      
+      // Broadcast the input to connected clients so they can see what was sent
+      broadcastLog(botId.toString(), `[INPUT] ${input}\n`);
+      
+      res.json({ message: "Input sent to bot" });
+    } catch (error) {
+      console.error("Error sending input to bot:", error);
+      res.status(500).json({ message: "Failed to send input to bot" });
+    }
+  });
+
   const httpServer = createServer(app);
 
   // WebSocket server for real-time logs - from javascript_websocket blueprint
@@ -2981,23 +3073,36 @@ async function launchBot(botId: number) {
     args = [entryFileName];
   }
   
-  const botProcess = spawn(command, args, {
-    cwd: workingDir,
-    env: botEnv,
-  });
+  let botProcess;
   
-  // Store process
-  botProcesses.set(botId, botProcess);
-  
-  // Handle spawn errors (prevent application crash)
-  botProcess.on('error', async (error: Error) => {
-    console.error(`[Bot ${botId}] Process spawn error:`, error);
-    botProcesses.delete(botId);
+  try {
+    // Spawn process with error isolation
+    botProcess = spawn(command, args, {
+      cwd: workingDir,
+      env: botEnv,
+      stdio: ['pipe', 'pipe', 'pipe'], // Enable stdin, stdout, stderr pipes
+    });
+    
+    // Store process with stdin reference
+    botProcesses.set(botId, botProcess);
+    
+    // Handle spawn errors (prevent application crash)
+    botProcess.on('error', async (error: Error) => {
+      console.error(`[Bot ${botId}] Process spawn error:`, error);
+      botProcesses.delete(botId);
+      await storage.updateBot(botId, { 
+        status: 'error', 
+        errorMessage: `Failed to start bot: ${error.message}` 
+      });
+    });
+  } catch (error: any) {
+    console.error(`[Bot ${botId}] Critical error spawning process:`, error);
     await storage.updateBot(botId, { 
       status: 'error', 
-      errorMessage: `Failed to start bot: ${error.message}` 
+      errorMessage: `Critical spawn error: ${error.message}` 
     });
-  });
+    throw error;
+  }
   
   // Handle process output
   botProcess.stdout.on('data', async (data: Buffer) => {
