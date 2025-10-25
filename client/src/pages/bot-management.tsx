@@ -86,6 +86,7 @@ export default function BotManagement() {
   const [editingFile, setEditingFile] = useState<string | null>(null);
   const [newPackage, setNewPackage] = useState("");
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
+  const [consoleInput, setConsoleInput] = useState("");
 
   const isValidBotId = Boolean(botId && botId !== 'null' && botId !== 'undefined');
 
@@ -343,9 +344,52 @@ export default function BotManagement() {
     },
   });
 
+  const sendInputMutation = useMutation({
+    mutationFn: (input: string) => apiRequest('POST', `/api/bots/${botId}/input`, { input }),
+    onSuccess: () => {
+      setConsoleInput("");
+    },
+    onError: () => {
+      toast({ title: "Failed to send input", variant: "destructive" });
+    },
+  });
+
   const copyToClipboard = () => {
     navigator.clipboard.writeText(logs.join('\n'));
     toast({ title: "Logs copied to clipboard" });
+  };
+
+  const downloadBotFiles = async () => {
+    try {
+      const response = await fetch(`/api/bots/${botId}/download`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (!response.ok) throw new Error('Download failed');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${bot?.name || 'bot'}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      toast({ title: "Download started" });
+    } catch (error) {
+      toast({ title: "Download failed", variant: "destructive" });
+    }
+  };
+
+  const handleSendInput = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (consoleInput.trim() && bot?.status === 'running') {
+      sendInputMutation.mutate(consoleInput);
+    }
   };
 
   if (isLoading) {
@@ -482,6 +526,14 @@ export default function BotManagement() {
                     <RotateCw className="mr-2 h-4 w-4" />
                     Restart
                   </Button>
+                  <Button
+                    variant="outline"
+                    onClick={downloadBotFiles}
+                    data-testid="button-download-files"
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    Download ZIP
+                  </Button>
                 </div>
 
                 <div className="pt-4 border-t">
@@ -526,7 +578,7 @@ export default function BotManagement() {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
                 <div className="bg-slate-900 dark:bg-slate-950 rounded-lg p-4 h-96 overflow-y-auto font-mono text-sm" data-testid="logs-container">
                   {logs.length === 0 ? (
                     <p className="text-slate-500">No logs yet. Logs will appear here when your bot is running.</p>
@@ -539,6 +591,31 @@ export default function BotManagement() {
                   )}
                   <div ref={logsEndRef} />
                 </div>
+                
+                {bot.status === 'running' && (
+                  <form onSubmit={handleSendInput} className="flex gap-2">
+                    <Input
+                      type="text"
+                      placeholder="Type a command and press Enter..."
+                      value={consoleInput}
+                      onChange={(e) => setConsoleInput(e.target.value)}
+                      className="bg-slate-900 dark:bg-slate-950 text-slate-300 border-slate-700 font-mono"
+                      data-testid="input-console"
+                      disabled={sendInputMutation.isPending}
+                    />
+                    <Button 
+                      type="submit" 
+                      disabled={!consoleInput.trim() || sendInputMutation.isPending}
+                      data-testid="button-send-input"
+                    >
+                      {sendInputMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        "Send"
+                      )}
+                    </Button>
+                  </form>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
