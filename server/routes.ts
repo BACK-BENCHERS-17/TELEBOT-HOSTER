@@ -1887,8 +1887,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.incrementUsage(userId);
       
       res.json(bot);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deploying bot:", error);
+      
+      // Clean up on deployment failure
+      // Note: If bot was created but later steps failed, we should clean it up
+      // This ensures usage count and bot records stay in sync
+      try {
+        // Try to find if a bot was partially created
+        const userBots = await storage.getBotsByUserId(userId);
+        const partialBot = userBots.find(b => b.name === req.body.name && b.status === 'stopped');
+        
+        if (partialBot) {
+          console.log(`[Bot Deploy] Cleaning up partially created bot ${partialBot.id}`);
+          await storage.deleteBot(partialBot.id);
+          
+          // Decrement usage if it was incremented
+          const user = await storage.getUser(userId);
+          if (user && user.usageCount > 0) {
+            await storage.decrementUsage(userId);
+          }
+        }
+      } catch (cleanupError: any) {
+        console.error("Error during deployment cleanup:", cleanupError);
+      }
+      
       res.status(500).json({ message: "Failed to deploy bot" });
     }
   });
@@ -2452,11 +2475,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await promisify(fs.writeFile)(fullPath, content || '', 'utf-8');
       }
       
-      // Re-save bot files to database to persist changes
+      // Re-save bot files to CockroachDB to persist changes
       try {
         await resaveBotFilesToDatabase(bot);
       } catch (error) {
-        console.error("Error re-saving bot files to database:", error);
+        console.error("Error re-saving bot files to CockroachDB:", error);
         // Continue even if database save fails - file is still saved locally
       }
       
@@ -2507,12 +2530,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await unlinkAsync(fullPath);
       }
       
-      // Re-save bot files to GridFS to persist changes
+      // Re-save bot files to CockroachDB to persist changes
       try {
         await resaveBotFilesToDatabase(bot);
       } catch (error) {
-        console.error("Error re-saving bot files to GridFS:", error);
-        // Continue even if GridFS save fails - file is still deleted locally
+        console.error("Error re-saving bot files to CockroachDB:", error);
+        // Continue even if database save fails - file is still deleted locally
       }
       
       res.json({ message: "File deleted successfully" });
@@ -2562,12 +2585,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       await promisify(fs.rename)(fullOldPath, fullNewPath);
       
-      // Re-save bot files to GridFS to persist changes
+      // Re-save bot files to CockroachDB to persist changes
       try {
         await resaveBotFilesToDatabase(bot);
       } catch (error) {
-        console.error("Error re-saving bot files to GridFS:", error);
-        // Continue even if GridFS save fails - file is still renamed locally
+        console.error("Error re-saving bot files to CockroachDB:", error);
+        // Continue even if database save fails - file is still renamed locally
       }
       
       res.json({ message: "File renamed successfully" });
@@ -2613,12 +2636,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Move uploaded file to target location
       await promisify(fs.rename)(req.file.path, fullPath);
       
-      // Re-save bot files to GridFS to persist changes
+      // Re-save bot files to CockroachDB to persist changes
       try {
         await resaveBotFilesToDatabase(bot);
       } catch (error) {
-        console.error("Error re-saving bot files to GridFS:", error);
-        // Continue even if GridFS save fails - file is still uploaded locally
+        console.error("Error re-saving bot files to CockroachDB:", error);
+        // Continue even if database save fails - file is still uploaded locally
       }
       
       res.json({ message: "File uploaded successfully", fileName });
@@ -2919,7 +2942,7 @@ async function ensureBotFilesExist(bot: any) {
   }
 }
 
-// Helper function to re-save bot files to database after editing
+// Helper function to re-save bot files to CockroachDB after editing
 async function resaveBotFilesToDatabase(bot: any): Promise<void> {
   if (!bot.extractedPath || !fs.existsSync(bot.extractedPath)) {
     throw new Error("Bot files directory not found");
@@ -2954,17 +2977,17 @@ async function resaveBotFilesToDatabase(bot: any): Promise<void> {
       archive.finalize();
     });
 
-    // Save new ZIP to database
+    // Save new ZIP to CockroachDB
     const zipBuffer = await promisify(fs.readFile)(tempZipPath);
     await storage.saveBotFile(bot.id, `${bot.name}_${Date.now()}.zip`, zipBuffer);
-    console.log(`[Bot ${bot.id}] Saved ZIP to database`);
+    console.log(`[Bot ${bot.id}] Saved ZIP to CockroachDB`);
 
     // Clean up temp ZIP file
     await unlinkAsync(tempZipPath);
     
-    console.log(`✅ Bot ${bot.id} files re-saved to database successfully`);
+    console.log(`✅ Bot ${bot.id} files re-saved to CockroachDB successfully`);
   } catch (error: any) {
-    console.error(`[Bot ${bot.id}] Failed to re-save files to database:`, error);
+    console.error(`[Bot ${bot.id}] Failed to re-save files to CockroachDB:`, error);
     throw new Error(`Failed to save bot files: ${error.message}`);
   }
 }
@@ -2981,7 +3004,7 @@ async function launchBot(botId: number) {
     throw new Error("Bot is already running");
   }
   
-  // Ensure bot files exist (restore from GridFS if needed)
+  // Ensure bot files exist (restore from CockroachDB if needed)
   await ensureBotFilesExist(bot);
   
   // Install dependencies before starting (show installing status)
