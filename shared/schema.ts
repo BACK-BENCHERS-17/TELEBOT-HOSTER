@@ -107,6 +107,7 @@ export const botsRelations = relations(bots, ({ one, many }) => ({
     references: [users.id],
   }),
   envVars: many(environmentVariables),
+  botFile: one(botFiles),
 }));
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -167,3 +168,25 @@ export const insertOTPSchema = createInsertSchema(otps).omit({
   id: true,
   createdAt: true,
 });
+
+// Bot Files table - Stores bot ZIP files in PostgreSQL (replaces GridFS)
+export const botFiles = pgTable("bot_files", {
+  id: serial("id").primaryKey(),
+  botId: integer("bot_id").notNull().references(() => bots.id, { onDelete: "cascade" }).unique(),
+  filename: varchar("filename", { length: 255 }).notNull(),
+  data: text("data").notNull(),
+  size: integer("size").notNull(),
+  uploadedAt: timestamp("uploaded_at").defaultNow(),
+});
+
+export const botFilesRelations = relations(botFiles, ({ one }) => ({
+  bot: one(bots, {
+    fields: [botFiles.botId],
+    references: [bots.id],
+  }),
+}));
+
+export type BotFile = typeof botFiles.$inferSelect;
+export type InsertBotFile = typeof botFiles.$inferInsert;
+
+export const insertBotFileSchema = createInsertSchema(botFiles);
