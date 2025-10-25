@@ -1841,23 +1841,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Save ZIP file to GridFS for persistence across restarts
-      let gridfsFileId: string | undefined;
-      try {
-        console.log(`[Bot Deploy] Saving ZIP file to MongoDB GridFS...`);
-        const zipStream = fs.createReadStream(zipPath);
-        gridfsFileId = await storage.saveBotFile(`${name}_${Date.now()}.zip`, zipStream);
-        console.log(`✅ Bot ZIP saved to GridFS with ID: ${gridfsFileId}`);
-      } catch (error: any) {
-        console.error(`[Bot Deploy] Failed to save ZIP to GridFS:`, error);
-        await unlinkAsync(zipPath);
-        await promisify(fs.rm)(extractPath, { recursive: true, force: true });
-        return res.status(500).json({ 
-          message: `Failed to save bot files: ${error.message}` 
-        });
-      }
-      
-      // Create bot record
+      // Create bot record first
       const bot = await storage.createBot({
         userId,
         name: validatedBot.data.name,
@@ -1868,8 +1852,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         entryPoint: entryPointPath, // Relative path to entry file from botDirectory
       });
       
-      // Update bot with GridFS file ID
-      await storage.updateBot(bot.id, { gridfsFileId });
+      // Save ZIP file to PostgreSQL for persistence across restarts
+      try {
+        console.log(`[Bot Deploy] Saving ZIP file to PostgreSQL...`);
+        const zipBuffer = await promisify(fs.readFile)(zipPath);
+        await storage.saveBotFile(bot.id, `${name}_${Date.now()}.zip`, zipBuffer);
+        console.log(`✅ Bot ZIP saved to PostgreSQL`);
+      } catch (error: any) {
+        console.error(`[Bot Deploy] Failed to save ZIP to database:`, error);
+        await storage.deleteBot(bot.id);
+        await unlinkAsync(zipPath);
+        await promisify(fs.rm)(extractPath, { recursive: true, force: true });
+        return res.status(500).json({ 
+          message: `Failed to save bot files: ${error.message}` 
+        });
+      }
       
       // Create environment variables with validation
       for (const envVar of envVars) {
@@ -2021,14 +2018,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await promisify(fs.rm)(bot.extractedPath, { recursive: true, force: true });
       }
       
-      // Delete from GridFS if exists
-      if (bot.gridfsFileId) {
-        try {
-          await storage.deleteBotFile(bot.gridfsFileId);
-          console.log(`[Bot ${botId}] Deleted ZIP from GridFS`);
-        } catch (error) {
-          console.error(`[Bot ${botId}] Failed to delete GridFS file:`, error);
-        }
+      // Delete bot files from PostgreSQL
+      try {
+        await storage.deleteBotFile(botId);
+        console.log(`[Bot ${botId}] Deleted ZIP from database`);
+      } catch (error) {
+        console.error(`[Bot ${botId}] Failed to delete bot files:`, error);
       }
       
       // Delete from database
@@ -2459,12 +2454,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await promisify(fs.writeFile)(fullPath, content || '', 'utf-8');
       }
       
-      // Re-save bot files to GridFS to persist changes
+      // Re-save bot files to database to persist changes
       try {
-        await resaveBotFilesToGridFS(bot);
+        await resaveBotFilesToDatabase(bot);
       } catch (error) {
-        console.error("Error re-saving bot files to GridFS:", error);
-        // Continue even if GridFS save fails - file is still saved locally
+        console.error("Error re-saving bot files to database:", error);
+        // Continue even if database save fails - file is still saved locally
       }
       
       res.json({ message: "File created successfully" });
@@ -2516,7 +2511,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Re-save bot files to GridFS to persist changes
       try {
-        await resaveBotFilesToGridFS(bot);
+        await resaveBotFilesToDatabase(bot);
       } catch (error) {
         console.error("Error re-saving bot files to GridFS:", error);
         // Continue even if GridFS save fails - file is still deleted locally
@@ -2571,7 +2566,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Re-save bot files to GridFS to persist changes
       try {
-        await resaveBotFilesToGridFS(bot);
+        await resaveBotFilesToDatabase(bot);
       } catch (error) {
         console.error("Error re-saving bot files to GridFS:", error);
         // Continue even if GridFS save fails - file is still renamed locally
@@ -2622,7 +2617,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Re-save bot files to GridFS to persist changes
       try {
-        await resaveBotFilesToGridFS(bot);
+        await resaveBotFilesToDatabase(bot);
       } catch (error) {
         console.error("Error re-saving bot files to GridFS:", error);
         // Continue even if GridFS save fails - file is still uploaded locally
@@ -2688,10 +2683,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }
 
+  // Auto-restart bots that were running before server restart
+  setTimeout(async () => {
+    try {
+      console.log('🔄 Checking for bots to auto-restart...');
+      
+      // Get all users to check their autoRestart settings
+      const allUsers = await storage.getAllUsers();
+      const userAutoRestartMap = new Map<string, boolean>();
+      allUsers.forEach(user => {
+        userAutoRestartMap.set(user.id, user.autoRestart === 'true');
+      });
+      
+      // Get all bots from database
+      const allBots = await Promise.all(
+        allUsers.map(user => storage.getBotsByUserId(user.id))
+      ).then(results => results.flat());
+      
+      const runningBots = allBots.filter(bot => bot.status === 'running');
+      
+      if (runningBots.length === 0) {
+        console.log('ℹ️  No bots were running before restart');
+        return;
+      }
+      
+      console.log(`📋 Found ${runningBots.length} bots that were running before restart`);
+      
+      for (const bot of runningBots) {
+        const shouldAutoRestart = userAutoRestartMap.get(bot.userId) || false;
+        
+        if (shouldAutoRestart) {
+          console.log(`🚀 Auto-restarting bot ${bot.id} (${bot.name})...`);
+          try {
+            await launchBot(bot.id);
+            console.log(`✅ Bot ${bot.id} (${bot.name}) auto-restarted successfully`);
+          } catch (error: any) {
+            console.error(`❌ Failed to auto-restart bot ${bot.id}:`, error.message);
+            await storage.updateBot(bot.id, {
+              status: 'error',
+              errorMessage: `Auto-restart failed: ${error.message}`
+            });
+          }
+        } else {
+          console.log(`⏸️  Bot ${bot.id} (${bot.name}) was running but auto-restart is disabled - marking as stopped`);
+          await storage.updateBot(bot.id, { status: 'stopped' });
+        }
+      }
+      
+      console.log('✅ Auto-restart process completed');
+    } catch (error) {
+      console.error('❌ Error during auto-restart process:', error);
+    }
+  }, 5000); // Wait 5 seconds after server starts to allow full initialization
+
   return httpServer;
 }
 
-// Helper function to ensure bot files are restored from GridFS if needed
+// Helper function to ensure bot files are restored from database if needed
 async function ensureBotFilesExist(bot: any) {
   if (!bot.extractedPath) {
     throw new Error("Bot files have not been uploaded. Please upload bot files first.");
@@ -2706,27 +2754,26 @@ async function ensureBotFilesExist(bot: any) {
     filesExist = false;
   }
   
-  // If files don't exist but we have GridFS ID, restore from GridFS
-  if (!filesExist && bot.gridfsFileId) {
-    console.log(`[Bot ${bot.id}] Files not found on filesystem, restoring from GridFS...`);
+  // If files don't exist, restore from database
+  if (!filesExist) {
+    console.log(`[Bot ${bot.id}] Files not found on filesystem, restoring from database...`);
     
     try {
+      // Get ZIP file from database
+      const botFile = await storage.getBotFile(bot.id);
+      if (!botFile) {
+        throw new Error("Bot files not found in database. Please re-upload the bot.");
+      }
+      
       // Create temp directory for ZIP
       const tempZipPath = path.join('uploads', `temp_${bot.id}_${Date.now()}.zip`);
       await mkdirAsync('uploads', { recursive: true });
       
-      // Download ZIP from GridFS
-      const gridfsStream = await storage.getBotFile(bot.gridfsFileId);
-      const writeStream = fs.createWriteStream(tempZipPath);
+      // Convert base64 data to buffer and write to temp file
+      const zipBuffer = Buffer.from(botFile.data, 'base64');
+      await promisify(fs.writeFile)(tempZipPath, zipBuffer);
       
-      await new Promise<void>((resolve, reject) => {
-        gridfsStream.pipe(writeStream);
-        writeStream.on('finish', resolve);
-        writeStream.on('error', reject);
-        gridfsStream.on('error', reject);
-      });
-      
-      console.log(`[Bot ${bot.id}] Downloaded ZIP from GridFS to ${tempZipPath}`);
+      console.log(`[Bot ${bot.id}] Downloaded ZIP from database to ${tempZipPath}`);
       
       // Extract ZIP to extractedPath
       await mkdirAsync(bot.extractedPath, { recursive: true });
@@ -2739,32 +2786,57 @@ async function ensureBotFilesExist(bot: any) {
       // Flatten nested folders if needed
       await flattenExtractedFolder(bot.extractedPath);
       
+      // Fix permissions for Python virtual environment
+      if (bot.runtime === 'python') {
+        const venvPath = path.join(bot.extractedPath, '.venv');
+        if (fs.existsSync(venvPath)) {
+          console.log(`[Bot ${bot.id}] Fixing virtual environment permissions...`);
+          const pythonPath = path.join(venvPath, 'bin', 'python');
+          if (fs.existsSync(pythonPath)) {
+            await promisify(fs.chmod)(pythonPath, 0o755);
+          }
+          const activatePath = path.join(venvPath, 'bin', 'activate');
+          if (fs.existsSync(activatePath)) {
+            await promisify(fs.chmod)(activatePath, 0o755);
+          }
+          // Fix permissions for all executables in bin directory
+          const binPath = path.join(venvPath, 'bin');
+          const binFiles = await promisify(fs.readdir)(binPath);
+          for (const file of binFiles) {
+            const filePath = path.join(binPath, file);
+            const stat = await promisify(fs.stat)(filePath);
+            if (stat.isFile()) {
+              await promisify(fs.chmod)(filePath, 0o755);
+            }
+          }
+          console.log(`[Bot ${bot.id}] ✅ Virtual environment permissions fixed`);
+        }
+      }
+      
       // Clean up temp ZIP
       await unlinkAsync(tempZipPath);
       
-      console.log(`✅ Bot ${bot.id} files restored from GridFS`);
+      console.log(`✅ Bot ${bot.id} files restored from database`);
       
       // Install dependencies after restoring files
       console.log(`[Bot ${bot.id}] Installing packages...`);
       await installBotDependencies(bot.id, bot.extractedPath, bot.runtime);
       console.log(`✅ Bot ${bot.id} packages installed successfully`);
     } catch (error: any) {
-      console.error(`[Bot ${bot.id}] Failed to restore files from GridFS:`, error);
+      console.error(`[Bot ${bot.id}] Failed to restore files from database:`, error);
       throw new Error(`Failed to restore bot files from database: ${error.message}`);
     }
-  } else if (!filesExist) {
-    throw new Error(`Bot files not found. Please re-upload the bot.`);
   }
 }
 
-// Helper function to re-save bot files to GridFS after editing
-async function resaveBotFilesToGridFS(bot: any): Promise<void> {
+// Helper function to re-save bot files to database after editing
+async function resaveBotFilesToDatabase(bot: any): Promise<void> {
   if (!bot.extractedPath || !fs.existsSync(bot.extractedPath)) {
     throw new Error("Bot files directory not found");
   }
 
   try {
-    console.log(`[Bot ${bot.id}] Re-saving edited files to GridFS...`);
+    console.log(`[Bot ${bot.id}] Re-saving edited files to database...`);
     
     // Create temp ZIP file
     const tempZipPath = path.join('uploads', `bot_${bot.id}_${Date.now()}.zip`);
@@ -2792,31 +2864,17 @@ async function resaveBotFilesToGridFS(bot: any): Promise<void> {
       archive.finalize();
     });
 
-    // Save new ZIP to GridFS
-    const zipStream = fs.createReadStream(tempZipPath);
-    const newGridfsFileId = await storage.saveBotFile(`${bot.name}_${Date.now()}.zip`, zipStream);
-    console.log(`[Bot ${bot.id}] Saved new ZIP to GridFS with ID: ${newGridfsFileId}`);
-
-    // Delete old GridFS file if it exists
-    if (bot.gridfsFileId) {
-      try {
-        await storage.deleteBotFile(bot.gridfsFileId);
-        console.log(`[Bot ${bot.id}] Deleted old GridFS file: ${bot.gridfsFileId}`);
-      } catch (error) {
-        console.error(`[Bot ${bot.id}] Failed to delete old GridFS file:`, error);
-        // Continue even if deletion fails
-      }
-    }
-
-    // Update bot with new GridFS file ID
-    await storage.updateBot(bot.id, { gridfsFileId: newGridfsFileId });
+    // Save new ZIP to database
+    const zipBuffer = await promisify(fs.readFile)(tempZipPath);
+    await storage.saveBotFile(bot.id, `${bot.name}_${Date.now()}.zip`, zipBuffer);
+    console.log(`[Bot ${bot.id}] Saved ZIP to database`);
 
     // Clean up temp ZIP file
     await unlinkAsync(tempZipPath);
     
-    console.log(`✅ Bot ${bot.id} files re-saved to GridFS successfully`);
+    console.log(`✅ Bot ${bot.id} files re-saved to database successfully`);
   } catch (error: any) {
-    console.error(`[Bot ${bot.id}] Failed to re-save files to GridFS:`, error);
+    console.error(`[Bot ${bot.id}] Failed to re-save files to database:`, error);
     throw new Error(`Failed to save bot files: ${error.message}`);
   }
 }
