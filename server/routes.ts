@@ -1394,7 +1394,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch('/api/admin/tokens/:id', isAdmin, async (req: any, res) => {
     try {
-      const tokenId = parseInt(req.params.id);
+      const tokenId = req.params.id;
       const { isActive } = req.body;
       
       const updatedToken = await storage.updateToken(tokenId, { isActive });
@@ -1407,7 +1407,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/admin/tokens/:id', isAdmin, async (req: any, res) => {
     try {
-      const tokenId = parseInt(req.params.id);
+      const tokenId = req.params.id;
       await storage.deleteToken(tokenId);
       res.json({ success: true });
     } catch (error) {
@@ -1431,7 +1431,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get single bot
   app.get("/api/bots/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const botId = parseInt(req.params.id);
+      const botId = req.params.id;
       const bot = await storage.getBotById(botId);
       
       if (!bot) {
@@ -1896,7 +1896,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Start bot
   app.post("/api/bots/:id/start", isAuthenticated, async (req: any, res) => {
     try {
-      const botId = parseInt(req.params.id);
+      const botId = req.params.id;
       const bot = await storage.getBotById(botId);
       
       if (!bot || bot.userId !== req.user.id) {
@@ -1907,7 +1907,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(updatedBot);
     } catch (error: any) {
       console.error("Error starting bot:", error);
-      await storage.updateBot(parseInt(req.params.id), { 
+      await storage.updateBot(req.params.id, { 
         status: 'error', 
         errorMessage: error.message 
       });
@@ -1918,7 +1918,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Stop bot
   app.post("/api/bots/:id/stop", isAuthenticated, async (req: any, res) => {
     try {
-      const botId = parseInt(req.params.id);
+      const botId = req.params.id;
       const bot = await storage.getBotById(botId);
       
       if (!bot || bot.userId !== req.user.id) {
@@ -1950,7 +1950,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Restart bot
   app.post("/api/bots/:id/restart", isAuthenticated, async (req: any, res) => {
     try {
-      const botId = parseInt(req.params.id);
+      const botId = req.params.id;
       const bot = await storage.getBotById(botId);
       
       if (!bot || bot.userId !== req.user.id) {
@@ -1979,7 +1979,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(updatedBot);
     } catch (error: any) {
       console.error("Error restarting bot:", error);
-      await storage.updateBot(parseInt(req.params.id), { 
+      await storage.updateBot(req.params.id, { 
         status: 'error', 
         errorMessage: error.message 
       });
@@ -1990,7 +1990,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Delete bot
   app.delete("/api/bots/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const botId = parseInt(req.params.id);
+      const botId = req.params.id;
       const bot = await storage.getBotById(botId);
       
       if (!bot || bot.userId !== req.user.id) {
@@ -2043,7 +2043,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get environment variables
   app.get("/api/bots/:id/env", isAuthenticated, async (req: any, res) => {
     try {
-      const botId = parseInt(req.params.id);
+      const botId = req.params.id;
       const bot = await storage.getBotById(botId);
       
       if (!bot || bot.userId !== req.user.id) {
@@ -2061,7 +2061,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Add environment variable
   app.post("/api/bots/:id/env", isAuthenticated, async (req: any, res) => {
     try {
-      const botId = parseInt(req.params.id);
+      const botId = req.params.id;
       const bot = await storage.getBotById(botId);
       
       if (!bot || bot.userId !== req.user.id) {
@@ -2092,8 +2092,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Delete environment variable
   app.delete("/api/bots/:id/env/:envId", isAuthenticated, async (req: any, res) => {
     try {
-      const botId = parseInt(req.params.id);
-      const envId = parseInt(req.params.envId);
+      const botId = req.params.id;
+      const envId = req.params.envId;
       const bot = await storage.getBotById(botId);
       
       if (!bot || bot.userId !== req.user.id) {
@@ -2111,7 +2111,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update bot settings
   app.patch("/api/bots/:id/settings", isAuthenticated, async (req: any, res) => {
     try {
-      const botId = parseInt(req.params.id);
+      const botId = req.params.id;
       const bot = await storage.getBotById(botId);
       
       if (!bot || bot.userId !== req.user.id) {
@@ -2136,7 +2136,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get bot resource stats (CPU and RAM)
   app.get("/api/bots/:id/stats", isAuthenticated, async (req: any, res) => {
     try {
-      const botId = parseInt(req.params.id);
+      const botId = req.params.id;
       const bot = await storage.getBotById(botId);
       
       if (!bot || bot.userId !== req.user.id) {
@@ -2167,7 +2167,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Add package to bot dependencies
   app.post("/api/bots/:id/packages", isAuthenticated, async (req: any, res) => {
     try {
-      const botId = parseInt(req.params.id);
+      const botId = req.params.id;
       const bot = await storage.getBotById(botId);
       
       if (!bot || bot.userId !== req.user.id) {
@@ -2242,7 +2242,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get list of installed packages
   app.get("/api/bots/:id/packages", isAuthenticated, async (req: any, res) => {
     try {
-      const botId = parseInt(req.params.id);
+      const botId = req.params.id;
       const bot = await storage.getBotById(botId);
       
       if (!bot || bot.userId !== req.user.id) {
@@ -2282,7 +2282,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Remove package from bot dependencies
   app.delete("/api/bots/:id/packages/:packageName", isAuthenticated, async (req: any, res) => {
     try {
-      const botId = parseInt(req.params.id);
+      const botId = req.params.id;
       const bot = await storage.getBotById(botId);
       
       if (!bot || bot.userId !== req.user.id) {
@@ -2328,7 +2328,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // File management: List files in bot directory
   app.get("/api/bots/:id/files", isAuthenticated, async (req: any, res) => {
     try {
-      const botId = parseInt(req.params.id);
+      const botId = req.params.id;
       const bot = await storage.getBotById(botId);
       
       if (!bot || bot.userId !== req.user.id) {
@@ -2375,7 +2375,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // File management: Read file content
   app.get("/api/bots/:id/files/content", isAuthenticated, async (req: any, res) => {
     try {
-      const botId = parseInt(req.params.id);
+      const botId = req.params.id;
       const bot = await storage.getBotById(botId);
       
       if (!bot || bot.userId !== req.user.id) {
@@ -2415,7 +2415,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // File management: Create or update file
   app.post("/api/bots/:id/files", isAuthenticated, async (req: any, res) => {
     try {
-      const botId = parseInt(req.params.id);
+      const botId = req.params.id;
       const bot = await storage.getBotById(botId);
       
       if (!bot || bot.userId !== req.user.id) {
@@ -2470,7 +2470,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // File management: Delete file or directory
   app.delete("/api/bots/:id/files", isAuthenticated, async (req: any, res) => {
     try {
-      const botId = parseInt(req.params.id);
+      const botId = req.params.id;
       const bot = await storage.getBotById(botId);
       
       if (!bot || bot.userId !== req.user.id) {
@@ -2525,7 +2525,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // File management: Rename file or directory
   app.patch("/api/bots/:id/files/rename", isAuthenticated, async (req: any, res) => {
     try {
-      const botId = parseInt(req.params.id);
+      const botId = req.params.id;
       const bot = await storage.getBotById(botId);
       
       if (!bot || bot.userId !== req.user.id) {
@@ -2580,7 +2580,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // File management: Upload file
   app.post("/api/bots/:id/files/upload", isAuthenticated, upload.single('file'), async (req: any, res) => {
     try {
-      const botId = parseInt(req.params.id);
+      const botId = req.params.id;
       const bot = await storage.getBotById(botId);
       
       if (!bot || bot.userId !== req.user.id) {
@@ -2631,7 +2631,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Download bot files as ZIP
   app.get("/api/bots/:id/download", isAuthenticated, async (req: any, res) => {
     try {
-      const botId = parseInt(req.params.id);
+      const botId = req.params.id;
       const bot = await storage.getBotById(botId);
       
       if (!bot) {
@@ -2684,7 +2684,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Send input to bot stdin (interactive console)
   app.post("/api/bots/:id/input", isAuthenticated, async (req: any, res) => {
     try {
-      const botId = parseInt(req.params.id);
+      const botId = req.params.id;
       const { input } = req.body;
       
       if (!input) {
