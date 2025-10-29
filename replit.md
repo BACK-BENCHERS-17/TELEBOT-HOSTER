@@ -58,6 +58,18 @@ Preferred communication style: Simple, everyday language.
 - ZIP file extraction using unzipper package
 - Process spawning using Node.js `child_process` module
 - WebSocket-based real-time log streaming with client management via Map of WebSocket Sets
+- **Bot File Persistence System**:
+  - All bot files automatically saved to database after any file operation (create, edit, delete)
+  - `resaveBotFilesToDatabase()` creates ZIP of bot directory and saves to database
+  - Edited files replace previous versions (not creating duplicates)
+  - `ensureBotFilesExist()` restores files from database if missing on filesystem
+  - Files persist across server restarts by restoring from database on demand
+- **Auto-Restart with Stale Status Detection**:
+  - `isBotProcessActive()` verifies if bot process is actually running
+  - Detects and resets stale "running" status after server restarts
+  - Only attempts restart if actual process exists, preventing "Bot is already running" errors
+  - Cleans up dead process handles from memory map
+  - Auto-restart respects user's `autoRestart` setting
 
 **Storage Abstraction**
 - Interface-based storage pattern (`IStorage`) allowing swappable implementations
@@ -98,6 +110,11 @@ Preferred communication style: Simple, everyday language.
   - `bots` - Bot configurations, status, and metadata
   - `environment_variables` - Bot-specific environment variables
   - `access_tokens` - Token-based authentication credentials
+  - `bot_files` - Bot file storage as base64-encoded ZIP archives
+    - One record per bot (upserted on each file operation)
+    - Stores complete bot directory as compressed ZIP
+    - Enables file persistence across server restarts
+    - Replaces previous versions on update (no duplicates)
 
 **Schema Design Patterns**
 - UUID primary keys for users (using `gen_random_uuid()`)
