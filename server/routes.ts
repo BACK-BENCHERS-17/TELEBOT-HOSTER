@@ -2994,6 +2994,21 @@ async function resaveBotFilesToDatabase(bot: any): Promise<void> {
   }
 }
 
+// Helper function to check if a bot process is actually active
+function isBotProcessActive(botId: number): boolean {
+  const process = botProcesses.get(botId);
+  if (!process) return false;
+  
+  try {
+    // Check if process is still alive
+    // Sending signal 0 doesn't kill the process, just checks if it exists
+    return process.kill(0);
+  } catch {
+    // Process doesn't exist
+    return false;
+  }
+}
+
 // Shared function to launch a bot
 async function launchBot(botId: number) {
   const bot = await storage.getBotById(botId);
@@ -3002,8 +3017,33 @@ async function launchBot(botId: number) {
     throw new Error("Bot not found");
   }
   
+  // Check if bot is marked as running
   if (bot.status === 'running') {
-    throw new Error("Bot is already running");
+    // Verify if process is actually running
+    if (isBotProcessActive(botId)) {
+      // Process is actually running, cannot start again
+      throw new Error("Bot is already running");
+    } else {
+      // Stale status - bot is marked running but no active process exists
+      // This happens after server restarts
+      console.log(`[Bot ${botId}] Detected stale 'running' status, resetting to stopped`);
+      
+      // Clean up any dead process handles from the map
+      if (botProcesses.has(botId)) {
+        botProcesses.delete(botId);
+      }
+      
+      await storage.updateBot(botId, { 
+        status: 'stopped', 
+        processId: null,
+        errorMessage: null
+      });
+      // Reload the bot with updated status
+      const updatedBot = await storage.getBotById(botId);
+      if (updatedBot) {
+        Object.assign(bot, updatedBot);
+      }
+    }
   }
   
   // Ensure bot files exist (restore from CockroachDB if needed)
