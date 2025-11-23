@@ -117,20 +117,20 @@ export default function Landing() {
                     <MessageCircle className="h-5 w-5 text-primary" />
                   </div>
                   <div className="text-left">
-                    <p className="text-sm font-medium mb-1">Need help?</p>
+                    <p className="text-sm font-medium mb-1">💬 Need help?</p>
                     <p className="text-sm text-muted-foreground mb-3">
-                      Contact support for assistance
+                      Get instant support from our team
                     </p>
                     <a 
-                      href={`https://${contactInfo?.contact || 't.me/BACK_BENCHERS_x17'}`}
+                      href={`https://${contactInfo?.contact || 't.me/BACK_BENCHERS17'}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex"
+                      className="inline-flex hover-elevate active-elevate-2 transition-all"
                       data-testid="link-support"
                     >
-                      <Badge className="bg-[#0088cc] hover:bg-[#0088cc]/90 text-white gap-2">
+                      <Badge className="bg-gradient-to-r from-[#0088cc] to-[#0088cc]/80 hover:from-[#0088cc]/90 hover:to-[#0088cc]/70 text-white gap-2 text-xs font-semibold px-3 py-1.5">
                         <SiTelegram className="h-4 w-4" />
-                        {contactInfo?.contact || 't.me/BACK_BENCHERS_x17'}
+                        {contactInfo?.contact || 't.me/BACK_BENCHERS17'}
                       </Badge>
                     </a>
                   </div>

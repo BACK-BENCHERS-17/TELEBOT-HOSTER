@@ -32,14 +32,14 @@ function ContactInfoQuery() {
 
   return (
     <a
-      href={`https://${contactInfo?.contact || 't.me/BACK_BENCHERS_x17'}`}
+      href={`https://${contactInfo?.contact || 't.me/BACK_BENCHERS17'}`}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-2 text-sm text-primary hover-elevate active-elevate-2 px-3 py-1.5 rounded-md bg-background/50 border"
+      className="inline-flex items-center gap-2 text-sm font-medium text-primary hover-elevate active-elevate-2 px-4 py-2 rounded-lg bg-gradient-to-r from-primary/10 to-chart-2/10 border border-primary/30 hover:border-primary/50 transition-all"
       data-testid="link-contact-premium"
     >
       <MessageCircle className="h-4 w-4" />
-      <span>Contact for Premium Upgrade</span>
+      <span>🚀 Upgrade to Premium</span>
     </a>
   );
 }
