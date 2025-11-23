@@ -923,7 +923,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (!sent) {
         return res.status(500).json({ 
-          message: "Failed to send OTP. Make sure you've started a chat with our bot first. Visit t.me/BACK_BENCHERS or t.me/Dpx_Army_ff_01 for assistance." 
+          message: "Failed to send OTP. Make sure you've started a chat with our bot first. Visit t.me/BACK_BENCHERS17 for assistance." 
         });
       }
 

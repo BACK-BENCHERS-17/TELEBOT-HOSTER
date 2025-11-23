@@ -13,4 +13,4 @@ export const ADMIN_CREDENTIALS = {
   password: process.env.ADMIN_PASSWORD || 'change-this-password'
 };
 
-export const DEVELOPER_CONTACT = process.env.DEVELOPER_CONTACT || 't.me/BACK_BENCHERS_x17';
+export const DEVELOPER_CONTACT = process.env.DEVELOPER_CONTACT || 't.me/BACK_BENCHERS17';

@@ -415,7 +415,7 @@ Or use the menu button below! 👇`, 'Markdown', {
 ✅ Auto-restart (Premium)
 
 *Support:*
-Need assistance? Contact us at @BACK_BENCHERS17
+Need assistance? Contact us at t.me/BACK_BENCHERS17
 
 *Getting Started:*
 1. Use the menu button to open dashboard
