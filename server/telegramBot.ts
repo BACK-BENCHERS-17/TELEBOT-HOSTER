@@ -204,11 +204,11 @@ export async function sendWelcomeMessage(chatId: string, firstName: string): Pro
     return false;
   }
 
-  const webAppUrl = 'https://telehost-kndn.onrender.com';
+  const webAppUrl = 'https://telehost.qzz.io';
 
   const message = `👋 Welcome, ${firstName}!
 
-🎉 You've successfully logged in to TELEBOT HOSTER!
+🎉 You've successfully logged in to TELE HOST!
 
 Here's what you can do:
 ✅ Deploy Python and Node.js bots
@@ -274,7 +274,7 @@ export async function setMenuButton(): Promise<boolean> {
     return false;
   }
 
-  const webAppUrl = 'https://telehost-kndn.onrender.com';
+  const webAppUrl = 'https://telehost.qzz.io';
 
   try {
     const response = await makeRequest('setChatMenuButton', {
@@ -365,11 +365,11 @@ export async function handleBotUpdate(update: any): Promise<void> {
     const text = message.text;
     const firstName = message.from?.first_name || 'User';
 
-    const webAppUrl = 'https://telehost-kndn.onrender.com';
+    const webAppUrl = 'https://telehost.qzz.io';
 
     // Handle commands
     if (text.startsWith('/start')) {
-      await sendMessage(chatId, `👋 Welcome to TELEBOT HOSTER, ${firstName}!
+      await sendMessage(chatId, `👋 Welcome to TELE HOST, ${firstName}!
 
 🤖 I'm here to help you deploy and manage your Telegram bots with ease!
 
@@ -399,7 +399,7 @@ Or use the menu button below! 👇`, 'Markdown', {
       });
 
     } else if (text.startsWith('/help')) {
-      await sendMessage(chatId, `📖 *TELEBOT HOSTER - Help Guide*
+      await sendMessage(chatId, `📖 *TELE HOST - Help Guide*
 
 *Available Commands:*
 /start - Start the bot and see welcome message
@@ -415,7 +415,7 @@ Or use the menu button below! 👇`, 'Markdown', {
 ✅ Auto-restart (Premium)
 
 *Support:*
-Need assistance? Contact us at @BACK_BENCHERS_x17
+Need assistance? Contact us at @BACK_BENCHERS17
 
 *Getting Started:*
 1. Use the menu button to open dashboard
