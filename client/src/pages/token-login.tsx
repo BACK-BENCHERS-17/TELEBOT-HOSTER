@@ -87,7 +87,7 @@ export default function TokenLogin() {
               Authenticate with Telegram to access your dashboard
             </p>
             <TelegramLoginWidget 
-              botUsername={import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "TELEBOT_HOSTER_xBOT"}
+              botUsername={import.meta.env.VITE_TELEGRAM_BOT_USERNAME || "TELEHOSTxBOT"}
               onAuth={handleTelegramAuth}
               buttonSize="large"
             />
@@ -101,7 +101,7 @@ export default function TokenLogin() {
           <div className="text-center w-full">
             <p className="text-sm text-muted-foreground mb-3">Need assistance?</p>
             <a 
-              href="https://t.me/BACK_BENCHERS_x17"
+              href="https://t.me/BACK_BENCHERS17"
               target="_blank" 
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-muted hover:bg-muted/80 text-foreground font-medium text-sm transition-all hover-elevate"

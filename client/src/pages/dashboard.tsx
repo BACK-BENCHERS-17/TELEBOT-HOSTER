@@ -120,7 +120,7 @@ export default function Dashboard() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
               <Rocket className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold">TELEBOT HOSTER</span>
+            <span className="text-xl font-bold">TELE HOST</span>
           </div>
 
           <div className="flex items-center gap-2">
